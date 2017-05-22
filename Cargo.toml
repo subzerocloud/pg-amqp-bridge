@@ -1,0 +1,14 @@
+[package]
+name = "pgsql-amqp-bridge"
+version = "0.1.0"
+authors = ["steve-chavez <stevechavezast@gmail.com>"]
+
+[dependencies]
+amq-protocol = "^0.16"
+env_logger = "0.4.2"
+fallible-iterator = "0.1.3"
+futures = "0.1.12"
+lapin-futures = "0.8.2"
+log = "0.3.7"
+postgres = "0.13"
+tokio-core = "0.1.6"
