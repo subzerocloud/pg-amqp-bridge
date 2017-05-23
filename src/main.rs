@@ -35,20 +35,24 @@ struct Envelope{
   payload: String,
 }
 
-fn main() {
-  let config = config::Config::new();
-  env_logger::init().unwrap();
-
-  let bridge_channels = config.bridge_channels.clone();
-  let amqp_addr = config.amqp_host_port.parse().expect("amqp_host_port should be in format '127.0.0.1:5672'");
-  let pg_uri = config.postgresql_uri.clone();
-
-  // Parse bridge_channels
+fn parse_bridges(bridge_channels: &str) -> Vec<Bridge>{
   let mut bridges: Vec<Bridge> = Vec::new();
   let str_bridges: Vec<Vec<&str>> = bridge_channels.split(",").map(|s| s.split(":").collect()).collect();
   for i in 0..str_bridges.len(){
     bridges.push(Bridge{pg_channel: str_bridges[i][0].to_string(), amqp_entity: str_bridges[i][1].to_string()});
   }
+  bridges
+}
+
+fn main() {
+  let config = config::Config::new();
+  env_logger::init().unwrap();
+
+  let bridge_channels = &config.bridge_channels;
+  let amqp_addr = config.amqp_host_port.parse().expect("amqp_host_port should be in format '127.0.0.1:5672'");
+  let pg_uri = &config.postgresql_uri;
+
+  let bridges = parse_bridges(bridge_channels);
 
   let mut core = Core::new().unwrap();
   let handle = core.handle();
