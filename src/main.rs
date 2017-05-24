@@ -31,9 +31,13 @@ struct Bridge{
 #[derive(Debug)]
 struct Envelope{
   pg_channel: String,
+  routing_key: RoutingKey,
+  message: Message,
   amqp_entity: String,
-  payload: String,
 }
+
+type RoutingKey = String;
+type Message = String;
 
 fn parse_bridges(bridge_channels: &str) -> Vec<Bridge>{
   let mut bridges: Vec<Bridge> = Vec::new();
@@ -42,6 +46,15 @@ fn parse_bridges(bridge_channels: &str) -> Vec<Bridge>{
     bridges.push(Bridge{pg_channel: str_bridges[i][0].to_string(), amqp_entity: str_bridges[i][1].to_string()});
   }
   bridges
+}
+
+fn parse_payload(payload: &String) -> (RoutingKey, Message){
+  let v: Vec<&str> = payload.split("#").collect();
+  if v.len() > 1 {
+    (v[0].to_string(), v[1].to_string())
+  } else {
+    (String::new(), v[0].to_string())
+  }
 }
 
 fn main() {
@@ -66,9 +79,9 @@ fn main() {
       .and_then(|client|
        client.create_channel())
       .and_then(|channel| {
-       channel.queue_declare(&bridge.amqp_entity, 
-                             &QueueDeclareOptions{ 
-                               passive: true, durable: false, exclusive: false, 
+       channel.exchange_declare(&bridge.amqp_entity, "",
+                             &ExchangeDeclareOptions{ 
+                               passive: true, durable: false, internal: false, 
                                auto_delete: false, nowait: false}, 
                              FieldTable::new())
       })
@@ -93,7 +106,11 @@ fn main() {
       loop {
         match it.next() {
           Ok(Some(notification)) => {
-            let envelope = Envelope{pg_channel: bridge.pg_channel.clone(), payload: notification.payload, amqp_entity: bridge.amqp_entity.clone()};
+            let (routing_key, message) = parse_payload(&notification.payload);
+            let envelope = Envelope{pg_channel: bridge.pg_channel.clone(), 
+                                    routing_key: routing_key,
+                                    message: message, 
+                                    amqp_entity: bridge.amqp_entity.clone()};
             debug!("Sent: {:?}", envelope);
             thread_tx.send(envelope).unwrap();
           },
@@ -113,8 +130,9 @@ fn main() {
       loop {
         let envelope = rx.recv().unwrap();
         debug!("Received: {:?}", envelope);
-        println!("Forwarding {:?} from pg channel {:?} to amqp entity {:?}", envelope.payload, envelope.pg_channel, envelope.amqp_entity);
-        channel.basic_publish(envelope.amqp_entity.as_str(), format!("{:?}", envelope.payload).as_bytes(), 
+        println!("Forwarding {:?} from pg channel {:?} to amqp entity {:?} with routing key {:?} ", 
+                 envelope.message, envelope.pg_channel, envelope.amqp_entity, envelope.routing_key);
+        channel.basic_publish(envelope.amqp_entity.as_str(), envelope.routing_key.as_str(), format!("{:?}", envelope.message).as_bytes(), 
                               &BasicPublishOptions::default(), BasicProperties::default());
       }
       Ok(channel)
