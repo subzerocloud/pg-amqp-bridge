@@ -39,17 +39,21 @@ struct Envelope{
 type RoutingKey = String;
 type Message = String;
 
+const SEPARATOR: &str = "|";
+
 fn parse_bridges(bridge_channels: &str) -> Vec<Bridge>{
   let mut bridges: Vec<Bridge> = Vec::new();
   let str_bridges: Vec<Vec<&str>> = bridge_channels.split(",").map(|s| s.split(":").collect()).collect();
   for i in 0..str_bridges.len(){
-    bridges.push(Bridge{pg_channel: str_bridges[i][0].to_string(), amqp_entity: str_bridges[i][1].to_string()});
+    bridges.push(Bridge{pg_channel: str_bridges[i][0].to_string(),
+                        amqp_entity: if str_bridges[i].len() > 1 {str_bridges[i][1].to_string()} else {String::new()}
+                 });
   }
   bridges
 }
 
 fn parse_payload(payload: &String) -> (RoutingKey, Message){
-  let v: Vec<&str> = payload.split("#").collect();
+  let v: Vec<&str> = payload.split(SEPARATOR).collect();
   if v.len() > 1 {
     (v[0].to_string(), v[1].to_string())
   } else {
@@ -70,27 +74,6 @@ fn main() {
   let mut core = Core::new().unwrap();
   let handle = core.handle();
 
-  // Validate that amqp entities already exist, the "passive" attribute set to true does this
-  for bridge in &bridges{
-    let res = core.run( 
-      TcpStream::connect(&amqp_addr, &handle)
-      .and_then(|stream| 
-       lapin::client::Client::connect(stream, &ConnectionOptions::default()))
-      .and_then(|client|
-       client.create_channel())
-      .and_then(|channel| {
-       channel.exchange_declare(&bridge.amqp_entity, "",
-                             &ExchangeDeclareOptions{ 
-                               passive: true, durable: false, internal: false, 
-                               auto_delete: false, nowait: false}, 
-                             FieldTable::new())
-      })
-    );
-    if let Err(_) = res {
-      panic!("AMQP entity {} doesn't exist", bridge.amqp_entity)
-    }
-  }
-
   let (tx, rx): (Sender<Envelope>, Receiver<Envelope>) = channel();
 
   // Spawn threads that communicates via channel with amqp main event loop
@@ -107,9 +90,9 @@ fn main() {
         match it.next() {
           Ok(Some(notification)) => {
             let (routing_key, message) = parse_payload(&notification.payload);
-            let envelope = Envelope{pg_channel: bridge.pg_channel.clone(), 
+            let envelope = Envelope{pg_channel: bridge.pg_channel.clone(),
                                     routing_key: routing_key,
-                                    message: message, 
+                                    message: message,
                                     amqp_entity: bridge.amqp_entity.clone()};
             debug!("Sent: {:?}", envelope);
             thread_tx.send(envelope).unwrap();
@@ -130,9 +113,9 @@ fn main() {
       loop {
         let envelope = rx.recv().unwrap();
         debug!("Received: {:?}", envelope);
-        println!("Forwarding {:?} from pg channel {:?} to amqp entity {:?} with routing key {:?} ", 
+        println!("Forwarding {:?} from pg channel {:?} to exchange {:?} with routing key {:?} ",
                  envelope.message, envelope.pg_channel, envelope.amqp_entity, envelope.routing_key);
-        channel.basic_publish(envelope.amqp_entity.as_str(), envelope.routing_key.as_str(), format!("{:?}", envelope.message).as_bytes(), 
+        channel.basic_publish(envelope.amqp_entity.as_str(), envelope.routing_key.as_str(), format!("{:?}", envelope.message).as_bytes(),
                               &BasicPublishOptions::default(), BasicProperties::default());
       }
       Ok(channel)
