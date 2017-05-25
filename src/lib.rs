@@ -1,3 +1,11 @@
+extern crate amq_protocol;
+extern crate fallible_iterator;
+extern crate futures;
+extern crate lapin_futures as lapin;
+#[macro_use] extern crate log;
+extern crate postgres;
+extern crate tokio_core;
+
 use fallible_iterator::FallibleIterator;
 use futures::*;
 use lapin::client::*;
