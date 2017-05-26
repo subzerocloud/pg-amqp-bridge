@@ -45,7 +45,7 @@ pub fn start_bridge(amqp_host_port: &String, pg_uri: &String, bridge_channels: &
     spawn_pg_listener(pg_uri.clone(), bridge, sender.clone());
   }
 
-  amqp_publisher(amqp_addr, receiver);
+  amqp_publish(amqp_addr, receiver);
 }
 
 fn parse_bridge_channels(bridge_channels: &str) -> Vec<Bridge>{
@@ -100,13 +100,13 @@ fn parse_notification(payload: &str) -> (&str, &str){
   }
 }
 
-fn amqp_publisher(amqp_addr: SocketAddr, receiver: Receiver<Envelope>){
+fn amqp_publish(amqp_addr: SocketAddr, receiver: Receiver<Envelope>){
   let mut core = Core::new().expect("Could not create event loop");
   let handle = core.handle();
-  let _ = core.run(
+  core.run(
     TcpStream::connect(&amqp_addr, &handle)
     .and_then(|stream| Client::connect(stream, &ConnectionOptions::default()))
-    .and_then(|client| client.create_confirm_channel())
+    .and_then(|client| client.create_channel())
     .and_then(|channel| {
       println!("Waiting for notifications...");
       loop {
@@ -125,7 +125,7 @@ fn amqp_publisher(amqp_addr: SocketAddr, receiver: Receiver<Envelope>){
       }
       Ok(channel)
     })
-  );
+  ).expect("Could not publish message to amqp server");
 }
 
 #[cfg(test)]
