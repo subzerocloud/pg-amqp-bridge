@@ -44,3 +44,9 @@ NOTIFY pgchannel3, 'lazy.#|Topic message';
 ```
 
 You can specify the routing key with the usual syntax used for topic exchanges.
+
+## Run tests
+
+```shell
+cargo test
+```

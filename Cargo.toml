@@ -3,6 +3,10 @@ name = "pgsql-amqp-bridge"
 version = "0.1.0"
 authors = ["steve-chavez <stevechavezast@gmail.com>"]
 
+[[test]]
+name = "main"
+harness = false
+
 [dependencies]
 amq-protocol = "^0.17"
 env_logger = "0.4.2"
@@ -13,3 +17,5 @@ log = "0.3.7"
 postgres = "0.13"
 tokio-core = "0.1.6"
 
+[dev-dependencies]
+rustc-test = "0.1"

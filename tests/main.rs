@@ -1,3 +1,5 @@
+extern crate test;
+extern crate pgsql_amqp_bridge as bridge;
 extern crate amq_protocol;
 extern crate futures;
 extern crate tokio_core;
@@ -11,11 +13,16 @@ use tokio_core::reactor::Core;
 use tokio_core::net::TcpStream;
 use lapin::client::*;
 use lapin::channel::*;
+use std::env;
+use std::time::Duration;
+use std::thread;
+use test::*;
+use bridge::start_bridge;
 
 const TEST_AMQP_HOST_PORT: &str = "127.0.0.1:5672";
 const TEST_PG_URI: &str = "postgres://postgres@localhost";
+const TEST_BRIDGE_CHANNELS: &str = "pgchannel1,pgchannel2:pg_amqp_bridge_direct_exchange,pgchannel3:pg_amqp_bridge_topic_exchange";
 
-#[test]
 fn publishing_to_queue_works() {
   const TEST_QUEUE: &str = "pg_amqp_bridge_queue_1";
   const TEST_PG_CHANNEL: &str = "pgchannel1";
@@ -49,7 +56,6 @@ fn publishing_to_queue_works() {
   );
 }
 
-#[test]
 fn publishing_to_direct_exchange_works() {
   const TEST_QUEUE: &str = "pg_amqp_bridge_queue_2";
   const TEST_EXCHANGE: &str = "pg_amqp_bridge_direct_exchange";
@@ -93,8 +99,6 @@ fn publishing_to_direct_exchange_works() {
   );
 }
 
-#[test]
-#[ignore] //Works intermittently
 fn publishing_to_topic_exchange_works() {
   const TEST_QUEUE_1: &str = "pg_amqp_bridge_queue_3";
   const TEST_QUEUE_2: &str = "pg_amqp_bridge_queue_4";
@@ -163,3 +167,28 @@ fn publishing_to_topic_exchange_works() {
   );
 }
 
+fn add_test<F: FnOnce() + Send + 'static>(tests: &mut Vec<TestDescAndFn>, name: String, test: F) {
+  tests.push(TestDescAndFn {
+    desc: TestDesc {
+      name: test::DynTestName(name),
+      ignore: false,
+      should_panic: test::ShouldPanic::No
+    },
+    testfn: TestFn::dyn_test_fn(test)
+  });
+}
+
+fn main() {
+  let args: Vec<_> = env::args().collect();
+  let mut tests = Vec::new();
+  add_test(&mut tests, "publishing_to_queue_works".to_string(), publishing_to_queue_works);
+  add_test(&mut tests, "publishing_to_direct_exchange_works".to_string(), publishing_to_direct_exchange_works);
+  //add_test(&mut tests, "publishing_to_topic_exchange_works".to_string(), publishing_to_topic_exchange_works);
+  thread::spawn(||
+    start_bridge(&TEST_AMQP_HOST_PORT.to_string(), 
+                 &TEST_PG_URI.to_string(), 
+                 &TEST_BRIDGE_CHANNELS.to_string())
+  );
+  thread::sleep(Duration::from_millis(4000));
+  test::test_main(&args, tests);
+}
