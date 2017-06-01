@@ -23,8 +23,6 @@ impl Config {
 
 fn main() {
   let config = Config::new();
-  if let Err(_) = env_logger::init() {
-    panic!("Could not initialize logger");
-  };
- start_bridge(&config.amqp_host_port, &config.postgresql_uri, &config.bridge_channels);
+  env_logger::init().expect("Could not initialize logger");
+  start_bridge(&config.amqp_host_port, &config.postgresql_uri, &config.bridge_channels);
 }

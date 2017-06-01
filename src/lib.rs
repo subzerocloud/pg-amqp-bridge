@@ -15,7 +15,6 @@ use postgres::{Connection, TlsMode};
 use std::net::SocketAddr;
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::thread;
-use std::panic::catch_unwind;
 use std::string::String;
 use tokio_core::reactor::Core;
 use tokio_core::net::TcpStream;
@@ -58,8 +57,8 @@ fn parse_bridge_channels(bridge_channels: &str) -> Vec<Bridge>{
                  });
   }
   let mut flt_bs : Vec<Bridge> = bridges.into_iter().filter(|x| !x.pg_channel.is_empty()).collect();
-  if flt_bs.len() == 0 { 
-    panic!("No postgresql channel specified in \"{}\"", bridge_channels) 
+  if flt_bs.len() == 0 {
+    panic!("No postgresql channel specified in \"{}\"", bridge_channels)
   }
   flt_bs.sort();
   flt_bs.dedup_by(|a, b| a.pg_channel == b.pg_channel);
@@ -116,7 +115,7 @@ fn amqp_publish(amqp_addr: SocketAddr, receiver: Receiver<Envelope>){
         let envelope = match receiver.recv() {
           Ok(x) => x,
           Err(e) => {
-            error!("Could not receive: {:?}", e); 
+            error!("Could not receive: {:?}", e);
             continue
           }
         };
@@ -148,7 +147,7 @@ mod tests {
 
   #[test]
   fn parse_bridge_channels_works() {
-    assert!(vec![Bridge{pg_channel: "pgchannel1".to_string(), amqp_entity: "exchange1".to_string()}] 
+    assert!(vec![Bridge{pg_channel: "pgchannel1".to_string(), amqp_entity: "exchange1".to_string()}]
             == parse_bridge_channels("pgchannel1:exchange1"));
     assert!(vec![
               Bridge{pg_channel: "pgchannel1".to_string(), amqp_entity: "exchange1".to_string()},
@@ -168,6 +167,8 @@ mod tests {
               Bridge{pg_channel: "pgchannel1".to_string(), amqp_entity: "".to_string()},
             ] == parse_bridge_channels("pgchannel1,pgchannel1:exchange2,pgchannel1:exchange3,"));
   }
+
+  use std::panic::catch_unwind;
 
   #[test]
   fn parse_bridge_channels_panics_if_no_pg_channel() {

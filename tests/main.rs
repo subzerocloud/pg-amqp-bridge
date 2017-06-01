@@ -44,12 +44,12 @@ fn publishing_to_queue_works() {
       .and_then(move |_| channel.basic_consume(TEST_QUEUE, "my_consumer_1", &BasicConsumeOptions::default()))
       .and_then(move |stream| {
         let _ = pg_conn.execute(format!("NOTIFY {}, '{}|Queue test'", TEST_PG_CHANNEL, TEST_QUEUE).as_str(), &[]);
-        stream.into_future().map_err(|(err, _)| err) 
+        stream.into_future().map_err(|(err, _)| err)
       })
       .and_then(move |(message, _)| {
         let msg = message.unwrap();
         assert_eq!(msg.data, b"\"Queue test\"");
-        ch1.basic_ack(msg.delivery_tag) 
+        ch1.basic_ack(msg.delivery_tag)
       })
       .then(move |_| ch2.queue_delete(TEST_QUEUE, &QueueDeleteOptions::default()))
     })
@@ -75,11 +75,11 @@ fn publishing_to_direct_exchange_works() {
       let ch1 = channel.clone();
       let ch2 = channel.clone();
       channel.queue_declare(TEST_QUEUE, &QueueDeclareOptions::default(), FieldTable::new())
-      .and_then(move |_| 
-        channel.exchange_declare(TEST_EXCHANGE, "direct", 
+      .and_then(move |_|
+        channel.exchange_declare(TEST_EXCHANGE, "direct",
                                           &ExchangeDeclareOptions{
-                                            passive: false, durable: false, 
-                                            auto_delete: true, internal: false, 
+                                            passive: false, durable: false,
+                                            auto_delete: true, internal: false,
                                             nowait: false
                                           }, FieldTable::new())
         .and_then(move |_| channel.queue_bind(TEST_QUEUE, TEST_EXCHANGE, "test_direct_key", &QueueBindOptions::default(), FieldTable::new()))
@@ -87,12 +87,12 @@ fn publishing_to_direct_exchange_works() {
       .and_then(move |_| ch1.basic_consume(TEST_QUEUE, "my_consumer_2", &BasicConsumeOptions::default()))
       .and_then(move |stream| {
         let _ = pg_conn.execute(format!("NOTIFY {}, 'test_direct_key|Direct exchange test'", TEST_PG_CHANNEL).as_str(), &[]);
-        stream.into_future().map_err(|(err, _)| err) 
+        stream.into_future().map_err(|(err, _)| err)
       })
       .and_then(move |(message, _)| {
         let msg = message.unwrap();
         assert_eq!(msg.data, b"\"Direct exchange test\"");
-        ch2.basic_ack(msg.delivery_tag) 
+        ch2.basic_ack(msg.delivery_tag)
         .then(move |_| ch2.queue_delete(TEST_QUEUE, &QueueDeleteOptions::default()))
       })
     })
@@ -118,35 +118,35 @@ fn publishing_to_topic_exchange_works() {
       let ch2 = channel.clone();
       let ch3 = channel.clone();
       channel.queue_declare(TEST_QUEUE_1, &QueueDeclareOptions::default(), FieldTable::new())
-      .and_then(move |_| 
+      .and_then(move |_|
         channel.queue_declare(TEST_QUEUE_2, &QueueDeclareOptions::default(), FieldTable::new())
-        .and_then(move |_| 
-          channel.exchange_declare(TEST_EXCHANGE, "topic", 
+        .and_then(move |_|
+          channel.exchange_declare(TEST_EXCHANGE, "topic",
                                                 &ExchangeDeclareOptions{
-                                                  passive: false, durable: false, 
-                                                  auto_delete: true, internal: false, 
+                                                  passive: false, durable: false,
+                                                  auto_delete: true, internal: false,
                                                   nowait: false
                                                 }, FieldTable::new())
-          .and_then(move |_| 
+          .and_then(move |_|
             channel.queue_bind(TEST_QUEUE_1, TEST_EXCHANGE, "*.critical", &QueueBindOptions::default(), FieldTable::new())
             .and_then(move |_| channel.queue_bind(TEST_QUEUE_2, TEST_EXCHANGE, "*.info", &QueueBindOptions::default(), FieldTable::new()))
           )
         )
       )
-      .and_then(move |_| 
+      .and_then(move |_|
         ch1.basic_consume(TEST_QUEUE_1, "my_consumer_3", &BasicConsumeOptions::default())
         .and_then(move |stream| {
           let pg_conn = Connection::connect(TEST_PG_URI, TlsMode::None).unwrap();
           let _ = pg_conn.execute(format!("NOTIFY {}, 'kern.critical|Kernel critical message'", TEST_PG_CHANNEL).as_str(), &[]);
-          stream.into_future().map_err(|(err, _)| err) 
+          stream.into_future().map_err(|(err, _)| err)
         })
         .and_then(move |(message, _)| {
           let msg = message.unwrap();
           assert_eq!(msg.data, b"\"Kernel critical message\"");
-          ch1.basic_ack(msg.delivery_tag) 
+          ch1.basic_ack(msg.delivery_tag)
         })
       )
-      .and_then(move |_| 
+      .and_then(move |_|
         ch2.basic_consume(TEST_QUEUE_2, "my_consumer_4", &BasicConsumeOptions::default())
         .and_then(move |stream| {
           let pg_conn = Connection::connect(TEST_PG_URI, TlsMode::None).unwrap();
@@ -156,10 +156,10 @@ fn publishing_to_topic_exchange_works() {
         .and_then(move |(message, _)| {
           let msg = message.unwrap();
           assert_eq!(msg.data, b"\"Anon info message\"");
-          ch2.basic_ack(msg.delivery_tag) 
+          ch2.basic_ack(msg.delivery_tag)
         })
       )
-      .then(move |_| 
+      .then(move |_|
         ch3.queue_delete(TEST_QUEUE_1, &QueueDeleteOptions::default())
         .then(move |_| ch3.queue_delete(TEST_QUEUE_2, &QueueDeleteOptions::default()))
        )
@@ -185,8 +185,8 @@ fn main() {
   add_test(&mut tests, "publishing_to_direct_exchange_works".to_string(), publishing_to_direct_exchange_works);
   //add_test(&mut tests, "publishing_to_topic_exchange_works".to_string(), publishing_to_topic_exchange_works);
   thread::spawn(||
-    start_bridge(&TEST_AMQP_HOST_PORT.to_string(), 
-                 &TEST_PG_URI.to_string(), 
+    start_bridge(&TEST_AMQP_HOST_PORT.to_string(),
+                 &TEST_PG_URI.to_string(),
                  &TEST_BRIDGE_CHANNELS.to_string())
   );
   thread::sleep(Duration::from_millis(4000));
