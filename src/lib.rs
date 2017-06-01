@@ -107,7 +107,12 @@ fn amqp_publish(amqp_addr: SocketAddr, receiver: Receiver<Envelope>){
   let handle = core.handle();
   core.run(
     TcpStream::connect(&amqp_addr, &handle)
-    .and_then(|stream| Client::connect(stream, &ConnectionOptions::default()))
+    .and_then(|stream| Client::connect(stream, &ConnectionOptions {
+        username:  "guest".to_string(),
+        password:  "guest".to_string(),
+        vhost:     "/".to_string(),
+        heartbeat: 3,
+    }))
     .and_then(|client| client.create_channel())
     .and_then(|channel| {
       println!("Waiting for notifications...");
