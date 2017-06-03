@@ -8,14 +8,15 @@ name = "main"
 harness = false
 
 [dependencies]
-amq-protocol = "^0.15"
+amq-protocol = "^0.18"
 env_logger = "0.4.2"
 fallible-iterator = "0.1.3"
 futures = "0.1.12"
-lapin-futures = { git = "https://github.com/steve-chavez/lapin", branch = "backport"}
+lapin-futures = { git = "https://github.com/sozu-proxy/lapin", branch = "master"}
 log = "0.3.7"
-postgres = "0.13"
+tokio-postgres = "0.2.2"
 tokio-core = "0.1.6"
 
 [dev-dependencies]
 rustc-test = "0.1"
+postgres = "0.14.1"

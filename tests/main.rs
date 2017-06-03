@@ -48,7 +48,7 @@ fn publishing_to_queue_works() {
       })
       .and_then(move |(message, _)| {
         let msg = message.unwrap();
-        assert_eq!(msg.data, b"\"Queue test\"");
+        assert_eq!(msg.data, b"Queue test");
         ch1.basic_ack(msg.delivery_tag)
       })
       .then(move |_| ch2.queue_delete(TEST_QUEUE, &QueueDeleteOptions::default()))
@@ -91,7 +91,7 @@ fn publishing_to_direct_exchange_works() {
       })
       .and_then(move |(message, _)| {
         let msg = message.unwrap();
-        assert_eq!(msg.data, b"\"Direct exchange test\"");
+        assert_eq!(msg.data, b"Direct exchange test");
         ch2.basic_ack(msg.delivery_tag)
         .then(move |_| ch2.queue_delete(TEST_QUEUE, &QueueDeleteOptions::default()))
       })
@@ -142,7 +142,7 @@ fn publishing_to_topic_exchange_works() {
         })
         .and_then(move |(message, _)| {
           let msg = message.unwrap();
-          assert_eq!(msg.data, b"\"Kernel critical message\"");
+          assert_eq!(msg.data, b"Kernel critical message");
           ch1.basic_ack(msg.delivery_tag)
         })
       )
@@ -155,7 +155,7 @@ fn publishing_to_topic_exchange_works() {
         })
         .and_then(move |(message, _)| {
           let msg = message.unwrap();
-          assert_eq!(msg.data, b"\"Anon info message\"");
+          assert_eq!(msg.data, b"Anon info message");
           ch2.basic_ack(msg.delivery_tag)
         })
       )
