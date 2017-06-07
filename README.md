@@ -6,7 +6,7 @@ Bridge postgresql notifications to existing AMQP entities.
 
 ```shell
 POSTGRESQL_URI="postgres://postgres@localhost" \
-AMQP_HOST_PORT="127.0.0.1:5672" \
+AMQP_HOST_PORT="amqp://localhost//" \
 BRIDGE_CHANNELS="pgchannel1,pgchannel2:direct_exchange,pgchannel3:topic_exchange" \
 cargo run
 ```

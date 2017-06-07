@@ -1,21 +1,12 @@
-extern crate amq_protocol;
+extern crate amqp;
 extern crate fallible_iterator;
-extern crate futures;
-extern crate lapin_futures as lapin;
-extern crate tokio_core;
-extern crate tokio_postgres;
+extern crate postgres;
 
-use futures::*;
-use lapin::client::*;
-use lapin::channel::*;
-use lapin::client::Client;
-use std::net::SocketAddr;
+use amqp::{Session, Basic, protocol};
+use fallible_iterator::FallibleIterator;
+use postgres::*;
+use std::default::Default;
 use std::thread;
-use std::string::String;
-use tokio_core::reactor::Core;
-use tokio_core::net::TcpStream;
-use tokio_postgres::*;
-use std::io::{Error, ErrorKind};
 use std::thread::JoinHandle;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
@@ -35,17 +26,44 @@ struct Envelope<'a>{
 const SEPARATOR: char = '|';
 
 pub fn start_bridge(amqp_host_port: &String, pg_uri: &String, bridge_channels: &String){
-  let amqp_addr: SocketAddr = amqp_host_port.parse().expect("amqp_host_port should be in format '127.0.0.1:5672'");
   let bridges = parse_bridge_channels(bridge_channels);
 
   let mut children = Vec::new();
   for bridge in bridges{
-    children.push(spawn_listener_publisher(amqp_addr.clone(), pg_uri.clone(), bridge));
+    children.push(spawn_listener_publisher(amqp_host_port.clone(), pg_uri.clone(), bridge));
   }
 
   for child in children{
     let _ = child.join();
   }
+}
+
+fn spawn_listener_publisher(amqp_host_port: String, pg_uri: String, bridge: Bridge) -> JoinHandle<()>{
+  thread::spawn(move ||{
+    let mut session = Session::open_url(amqp_host_port.as_str()).unwrap();
+    let mut channel = session.open_channel(1).unwrap();
+
+    let pg_conn = Connection::connect(pg_uri, TlsMode::None).expect("Could not connect to PostgreSQL");
+    let listen_command = format!("LISTEN {}", bridge.pg_channel);
+    pg_conn.execute(listen_command.as_str(), &[]).expect("Could not send LISTEN");
+
+    println!("Listening on {}...", bridge.pg_channel);
+
+    let notifications = pg_conn.notifications();
+    let mut it = notifications.blocking_iter();
+    while let Ok(Some(notification)) = it.next() {
+      let (routing_key, message) = parse_notification(&notification.payload);
+      let envelope = Envelope{pg_channel: &bridge.pg_channel,
+                              routing_key: &routing_key,
+                              message: &message,
+                              amqp_entity: &bridge.amqp_entity};
+      channel.basic_publish(envelope.amqp_entity, envelope.routing_key, true, false,
+                            protocol::basic::BasicProperties{ content_type: Some("text".to_string()), ..Default::default()},
+                            envelope.message.as_bytes().to_vec()).ok().expect("Failed publishing");
+      println!("Forwarding {:?} from pg channel {:?} to exchange {:?} with routing key {:?} ",
+               envelope.message, envelope.pg_channel, envelope.amqp_entity, envelope.routing_key);
+    }
+  })
 }
 
 fn parse_bridge_channels(bridge_channels: &str) -> Vec<Bridge>{
@@ -72,42 +90,6 @@ fn parse_notification(payload: &str) -> (&str, &str){
   } else {
     ("", v[0])
   }
-}
-
-fn spawn_listener_publisher(amqp_addr: SocketAddr, pg_uri: String, bridge: Bridge) -> JoinHandle<()>{
-  thread::spawn(move ||{
-    let mut core = Core::new().expect("Could not create event loop");
-    let handle = core.handle();
-    let br = bridge.clone();
-    core.run(
-      TcpStream::connect(&amqp_addr, &handle)
-      .and_then(|stream| Client::connect(stream, &ConnectionOptions::default()))
-      .and_then(|client| client.create_channel())
-      .and_then(|channel| {
-        println!("Listening on {}...", bridge.pg_channel);
-        Connection::connect(pg_uri, TlsMode::None, &handle)
-        .then(|conn| 
-          conn.unwrap().batch_execute(format!("LISTEN {}", &bridge.pg_channel).as_str())
-          .map_err(|_|Error::new(ErrorKind::Other, ""))
-        )
-        .and_then(|conn|
-          conn.notifications().map_err(|_|Error::new(ErrorKind::Other, ""))
-          .for_each(move |n|{
-            let (routing_key, message) = parse_notification(&n.payload);
-            let envelope = Envelope{pg_channel: &br.pg_channel,
-                                    routing_key: &routing_key,
-                                    message: &message,
-                                    amqp_entity: &br.amqp_entity};
-            println!("Forwarding {:?} from pg channel {:?} to exchange {:?} with routing key {:?} ",
-                     envelope.message, envelope.pg_channel, envelope.amqp_entity, envelope.routing_key);
-            channel.basic_publish(envelope.amqp_entity, envelope.routing_key, envelope.message.as_bytes(),
-                                  &BasicPublishOptions::default(), BasicProperties::default())
-            .and_then(|_|Ok(()))
-          })
-        )
-      })
-    ).expect("Could not publish message to amqp server");
-  })
 }
 
 #[cfg(test)]

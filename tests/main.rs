@@ -185,7 +185,7 @@ fn main() {
   add_test(&mut tests, "publishing_to_direct_exchange_works".to_string(), publishing_to_direct_exchange_works);
   //add_test(&mut tests, "publishing_to_topic_exchange_works".to_string(), publishing_to_topic_exchange_works);
   thread::spawn(||
-    start_bridge(&TEST_AMQP_HOST_PORT.to_string(),
+    start_bridge(&"amqp://localhost//".to_string(),
                  &TEST_PG_URI.to_string(),
                  &TEST_BRIDGE_CHANNELS.to_string())
   );
