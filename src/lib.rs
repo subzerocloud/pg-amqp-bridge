@@ -2,7 +2,7 @@ extern crate amqp;
 extern crate fallible_iterator;
 extern crate postgres;
 
-use amqp::{Session, Basic, protocol};
+use amqp::{Session, Basic, protocol, Channel};
 use fallible_iterator::FallibleIterator;
 use postgres::*;
 use std::default::Default;
@@ -29,8 +29,13 @@ pub fn start_bridge(amqp_host_port: &String, pg_uri: &String, bridge_channels: &
   let bridges = parse_bridge_channels(bridge_channels);
 
   let mut children = Vec::new();
+
+  let mut session = Session::open_url(amqp_host_port.as_str()).unwrap();
+
+  let mut i = 0;
   for bridge in bridges{
-    children.push(spawn_listener_publisher(amqp_host_port.clone(), pg_uri.clone(), bridge));
+    i += 1;
+    children.push(spawn_listener_publisher(session.open_channel(i).unwrap(), pg_uri.clone(), bridge));
   }
 
   for child in children{
@@ -38,12 +43,10 @@ pub fn start_bridge(amqp_host_port: &String, pg_uri: &String, bridge_channels: &
   }
 }
 
-fn spawn_listener_publisher(amqp_host_port: String, pg_uri: String, bridge: Bridge) -> JoinHandle<()>{
+fn spawn_listener_publisher(mut channel: Channel, pg_uri: String, bridge: Bridge) -> JoinHandle<()>{
   thread::spawn(move ||{
-    let mut session = Session::open_url(amqp_host_port.as_str()).unwrap();
-    let mut channel = session.open_channel(1).unwrap();
-
     let pg_conn = Connection::connect(pg_uri, TlsMode::None).expect("Could not connect to PostgreSQL");
+
     let listen_command = format!("LISTEN {}", bridge.pg_channel);
     pg_conn.execute(listen_command.as_str(), &[]).expect("Could not send LISTEN");
 
