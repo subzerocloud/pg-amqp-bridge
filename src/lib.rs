@@ -82,7 +82,13 @@ fn parse_bridge_channels(bridge_channels: &str) -> Vec<Bridge>{
     panic!("No postgresql channel specified in \"{}\"", bridge_channels)
   }
   flt_bs.sort();
-  flt_bs.dedup_by(|a, b| a.pg_channel == b.pg_channel);
+  flt_bs.dedup_by(|a, b|{
+    let is_dup = a.pg_channel == b.pg_channel;
+    if is_dup{
+      panic!("Cannot have duplicate PostgreSQL channels.");
+    }
+    is_dup
+  });
   flt_bs
 }
 
@@ -128,9 +134,6 @@ mod tests {
               Bridge{pg_channel: "pgchannel2".to_string(), amqp_entity: "".to_string()},
               Bridge{pg_channel: "pgchannel3".to_string(), amqp_entity: "exchange3".to_string()}
             ] == parse_bridge_channels("pgchannel1,pgchannel2:,pgchannel3:exchange3,"));
-    assert!(vec![
-              Bridge{pg_channel: "pgchannel1".to_string(), amqp_entity: "".to_string()},
-            ] == parse_bridge_channels("pgchannel1,pgchannel1:exchange2,pgchannel1:exchange3,"));
   }
 
   use std::panic::catch_unwind;
@@ -141,5 +144,11 @@ mod tests {
     assert!(catch_unwind(|| parse_bridge_channels(":exchange1")).is_err());
     assert!(catch_unwind(|| parse_bridge_channels(":exchange1,:exchange2")).is_err());
     assert!(catch_unwind(|| parse_bridge_channels(",:,:exchange3,,")).is_err());
+  }
+
+  #[test]
+  fn parse_bridge_channels_panics_if_duplicate_pg_channel() {
+    assert!(catch_unwind(|| parse_bridge_channels("pgchannel1,pgchannel1:exchange2,pgchannel1:exchange3,")).is_err());
+    assert!(catch_unwind(|| parse_bridge_channels("pgchannel2, pgchannel2")).is_err());
   }
 }
