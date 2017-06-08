@@ -2,7 +2,7 @@ extern crate amqp;
 extern crate fallible_iterator;
 extern crate postgres;
 
-use amqp::{Session, Basic, protocol, Channel};
+use amqp::{Session, Basic, protocol, Channel, Table};
 use fallible_iterator::FallibleIterator;
 use postgres::*;
 use std::default::Default;
@@ -31,16 +31,41 @@ pub fn start_bridge(amqp_host_port: &String, pg_uri: &String, bridge_channels: &
   let mut children = Vec::new();
 
   let mut session = Session::open_url(amqp_host_port.as_str()).unwrap();
+  let mut ids = 0;
 
-  let mut i = 0;
+  for bridge in &bridges{
+    ids += 1;
+    let channel1 = session.open_channel(ids).unwrap();
+    ids += 1;
+    let channel2 = session.open_channel(ids).unwrap();
+    if !amqp_entity_exists(channel1, channel2, &bridge.amqp_entity){
+      panic!("The amqp entity {:?} doesn't exist", bridge.amqp_entity);
+    }
+  }
+
   for bridge in bridges{
-    i += 1;
-    children.push(spawn_listener_publisher(session.open_channel(i).unwrap(), pg_uri.clone(), bridge));
+    ids += 1;
+    let channel = session.open_channel(ids).unwrap();
+    children.push(spawn_listener_publisher(channel, pg_uri.clone(), bridge));
   }
 
   for child in children{
     let _ = child.join();
   }
+}
+
+
+/*
+ * Validates using two channels because currently rust-amqp hangs up when doing exchange_declare
+ * and queue_declare on the samme channel.
+ * It validates with passive set to true.
+*/
+fn amqp_entity_exists(mut channel1: Channel, mut channel2: Channel, amqp_entity: &String) -> bool{
+  let it_exists = channel1.queue_declare(amqp_entity.clone(), true, false, false, false, false, Table::new()).is_ok() ||
+                  channel2.exchange_declare(amqp_entity.clone(), "".to_string(), true, false, false, false, false, Table::new()).is_ok();
+  channel1.close(200, "").unwrap();
+  channel2.close(200, "").unwrap();
+  it_exists
 }
 
 fn spawn_listener_publisher(mut channel: Channel, pg_uri: String, bridge: Bridge) -> JoinHandle<()>{
