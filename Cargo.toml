@@ -16,8 +16,8 @@ postgres = "0.14.1"
 
 [dev-dependencies]
 rustc-test = "0.1"
-amq-protocol = "^0.18"
+amq-protocol = "^0.16"
 futures = "0.1.12"
-lapin-futures = { git = "https://github.com/sozu-proxy/lapin", branch = "master"}
+lapin-futures = "0.8.2"
 tokio-postgres = "0.2.2"
 tokio-core = "0.1.6"
