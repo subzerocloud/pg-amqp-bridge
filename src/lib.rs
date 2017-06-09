@@ -9,7 +9,6 @@ use std::default::Default;
 use std::thread;
 use std::thread::JoinHandle;
 
-
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 enum Type {
   Exchange,
