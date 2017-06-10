@@ -1,41 +1,51 @@
 # PostgreSQL to AMQP bridge 
 
-Bridge postgresql notifications to existing AMQP entities.
+Bridge PostgreSQL notifications to AMQP entities.
 
 ## Interface
 
 ```shell
 POSTGRESQL_URI="postgres://postgres@localhost" \
-AMQP_HOST_PORT="amqp://localhost//" \
-BRIDGE_CHANNELS="pgchannel1,pgchannel2:direct_exchange,pgchannel3:topic_exchange" \
+AMQP_URI="amqp://localhost//" \
+BRIDGE_CHANNELS="pgchannel1:task_queue,pgchannel2:direct_exchange,pgchannel3:topic_exchange" \
 cargo run
 ```
 
-The BRIDGE_CHANNELS specify a list of pg notification channels bridged to optional exchanges. 
-
-You can specify a routing key through sql with the format ```routing_key|message```:
+The BRIDGE_CHANNELS env var specifies a list of PostgreSQL notifications channels bound to an exchange or queue. 
 
 ## Sending notification to a queue
 
 ```sql
-NOTIFY pgchannel1, 'task_queue|Task message';
+NOTIFY pgchannel1, 'Task message';
 ```
 
-Since ```pgchannel1``` has no exchange declared in BRIDGE_CHANNELS "Task message" will be sent to the queue named ```task_queue```.
+Since ```pgchannel1``` is bound to ```task_queue``` in BRIDGE_CHANNELS ```'Task message'``` will be sent to ```task_queue```.
 
-This interface is similar to the ```basic_publish(exchange='', routing_key='task_queue', "Task message")``` function defined in many amqp libs.
+The following message is shown in the console :
 
-## Sending a notification to a direct exchange
+```bash
+Forwarding "Task message" from pg channel "pgchannel" to Queue "task_queue" with routing key "" 
+```
+
+## Sending notification to a direct exchange
+
+You can specify a routing key with the format ```routing_key|message```:
 
 ```sql
 NOTIFY pgchannel2, 'direct_key|Direct message';
 ```
 
-Since there is a ```pgchannel2:direct_exchange``` declared in BRIDGE_CHANNELS "Direct message" will be sent to ```direct_exchange``` with a routing key of ```direct_key```.
+Since there is a ```pgchannel2:direct_exchange``` declared in BRIDGE_CHANNELS ```'Direct message'``` will be sent to ```direct_exchange``` with a routing key of ```direct_key```.
 
-Again similar to: ```basic_publish(exchange='direct_exchange', routing_key='direct_key', "Direct message")```
+This message is shown:
 
-## Sending a notification to a topic exchange
+```bash
+Forwarding "Direct message" from pg channel "pgchannel2" to Exchange "direct_exchange" with routing key "direct_key" 
+```
+
+## Sending notification to a topic exchange
+
+You can specify the routing key with the usual syntax used for topic exchanges.
 
 ```sql
 NOTIFY pgchannel3, '*.orange|Topic message';
@@ -43,7 +53,7 @@ NOTIFY pgchannel3, 'quick.brown.fox|Topic message';
 NOTIFY pgchannel3, 'lazy.#|Topic message';
 ```
 
-You can specify the routing key with the usual syntax used for topic exchanges.
+**Note**: the bridge doesn't declare exchanges or queues, if they aren't previoulsy declared it will exit with an error.
 
 ## Run tests
 

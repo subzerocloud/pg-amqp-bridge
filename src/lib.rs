@@ -16,7 +16,7 @@ enum Type {
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-struct Bridge{
+struct Binding{
   pg_channel: String,
   amqp_entity: String,
   amqp_entity_type: Option<Type>
@@ -24,27 +24,27 @@ struct Bridge{
 
 const SEPARATOR: char = '|';
 
-pub fn start_bridge(amqp_host_port: &String, pg_uri: &String, bridge_channels: &String){
-  let mut bridges = parse_bridge_channels(bridge_channels);
+pub fn start_bridge(amqp_uri: &String, pg_uri: &String, bridge_channels: &String){
+  let mut bindings = parse_bridge_channels(bridge_channels);
   let mut children = Vec::new();
 
-  let mut session = Session::open_url(amqp_host_port.as_str()).unwrap();
+  let mut session = Session::open_url(amqp_uri.as_str()).unwrap();
   let mut channel_id = 0;
 
-  for bridge in &mut bridges{
+  for binding in &mut bindings{
     channel_id += 1; let channel1 = session.open_channel(channel_id).unwrap();
     channel_id += 1; let channel2 = session.open_channel(channel_id).unwrap();
-    let amqp_entity_type = amqp_entity_type(channel1, channel2, &bridge.amqp_entity);
+    let amqp_entity_type = amqp_entity_type(channel1, channel2, &binding.amqp_entity);
     if amqp_entity_type.is_none(){
-      panic!("The amqp entity {:?} doesn't exist", bridge.amqp_entity);
+      panic!("The amqp entity {:?} doesn't exist", binding.amqp_entity);
     }else{
-      bridge.amqp_entity_type = amqp_entity_type;
+      binding.amqp_entity_type = amqp_entity_type;
     }
   }
 
-  for bridge in bridges{
+  for binding in bindings{
     channel_id += 1; let channel = session.open_channel(channel_id).unwrap();
-    children.push(spawn_listener_publisher(channel, pg_uri.clone(), bridge));
+    children.push(spawn_listener_publisher(channel, pg_uri.clone(), binding));
   }
 
   for child in children{
@@ -52,32 +52,32 @@ pub fn start_bridge(amqp_host_port: &String, pg_uri: &String, bridge_channels: &
   }
 }
 
-fn spawn_listener_publisher(mut channel: Channel, pg_uri: String, bridge: Bridge) -> JoinHandle<()>{
+fn spawn_listener_publisher(mut channel: Channel, pg_uri: String, binding: Binding) -> JoinHandle<()>{
   thread::spawn(move ||{
     let pg_conn = Connection::connect(pg_uri, TlsMode::None).expect("Could not connect to PostgreSQL");
 
-    let listen_command = format!("LISTEN {}", bridge.pg_channel);
+    let listen_command = format!("LISTEN {}", binding.pg_channel);
     pg_conn.execute(listen_command.as_str(), &[]).unwrap();
 
-    println!("Listening on {}...", bridge.pg_channel);
+    println!("Listening on {}...", binding.pg_channel);
 
     let notifications = pg_conn.notifications();
     let mut it = notifications.blocking_iter();
 
-    let amqp_entity_type = bridge.amqp_entity_type.unwrap();
+    let amqp_entity_type = binding.amqp_entity_type.unwrap();
 
     while let Ok(Some(notification)) = it.next() {
       let (routing_key, message) = parse_notification(&notification.payload);
       let (exchange, key) =  if amqp_entity_type == Type::Exchange {
-                               (bridge.amqp_entity.as_str(), routing_key)
+                               (binding.amqp_entity.as_str(), routing_key)
                              } else {
-                               ("", bridge.amqp_entity.as_str())
+                               ("", binding.amqp_entity.as_str())
                              };
       channel.basic_publish(exchange, key, true, false,
                             protocol::basic::BasicProperties{ content_type: Some("text".to_string()), ..Default::default()},
                             message.as_bytes().to_vec()).unwrap();
       println!("Forwarding {:?} from pg channel {:?} to {:?} {:?} with routing key {:?} ",
-               message, bridge.pg_channel, amqp_entity_type, bridge.amqp_entity, routing_key);
+               message, binding.pg_channel, amqp_entity_type, binding.amqp_entity, routing_key);
     }
   })
 }
@@ -97,29 +97,29 @@ fn amqp_entity_type(mut channel1: Channel, mut channel2: Channel, amqp_entity: &
   opt_queue_type.or(opt_exchange_type)
 }
 
-fn parse_bridge_channels(bridge_channels: &str) -> Vec<Bridge>{
-  let mut bridges: Vec<Bridge> = Vec::new();
-  let str_bridges: Vec<Vec<&str>> = bridge_channels.split(",").map(|s| s.split(":").collect()).collect();
-  for i in 0..str_bridges.len(){
-    bridges.push(Bridge{pg_channel: str_bridges[i][0].trim().to_string(),
-                        amqp_entity: str_bridges[i].get(1).unwrap_or(&"").trim().to_string(),
+fn parse_bridge_channels(bridge_channels: &str) -> Vec<Binding>{
+  let mut bindings: Vec<Binding> = Vec::new();
+  let strs: Vec<Vec<&str>> = bridge_channels.split(",").map(|s| s.split(":").collect()).collect();
+  for i in 0..strs.len(){
+    bindings.push(Binding{pg_channel: strs[i][0].trim().to_string(),
+                        amqp_entity: strs[i].get(1).unwrap_or(&"").trim().to_string(),
                         amqp_entity_type: None
                  });
   }
-  let mut cleaned_bridges : Vec<Bridge> = bridges.into_iter().filter(|x| !x.pg_channel.is_empty() && !x.amqp_entity.is_empty())
+  let mut cleaned_bindings : Vec<Binding> = bindings.into_iter().filter(|x| !x.pg_channel.is_empty() && !x.amqp_entity.is_empty())
                                           .collect();
-  if cleaned_bridges.len() == 0 {
+  if cleaned_bindings.len() == 0 {
     panic!("No bindings(e.g. pgchannel1:queue1) specified in \"{}\"", bridge_channels)
   }
-  cleaned_bridges.sort();
-  cleaned_bridges.dedup_by(|a, b|{
+  cleaned_bindings.sort();
+  cleaned_bindings.dedup_by(|a, b|{
     let is_dup = a.pg_channel == b.pg_channel;
     if is_dup{
       panic!("Cannot have duplicate PostgreSQL channels.");
     }
     is_dup
   });
-  cleaned_bridges
+  cleaned_bindings
 }
 
 fn parse_notification(payload: &str) -> (&str, &str){
@@ -148,16 +148,16 @@ mod tests {
 
   #[test]
   fn parse_bridge_channels_works() {
-    assert!(vec![Bridge{pg_channel: "pgchannel1".to_string(), amqp_entity: "exchange1".to_string(), amqp_entity_type: None}]
+    assert!(vec![Binding{pg_channel: "pgchannel1".to_string(), amqp_entity: "exchange1".to_string(), amqp_entity_type: None}]
             == parse_bridge_channels("pgchannel1:exchange1"));
     assert!(vec![
-              Bridge{pg_channel: "pgchannel1".to_string(), amqp_entity: "exchange1".to_string(), amqp_entity_type: None},
-              Bridge{pg_channel: "pgchannel2".to_string(), amqp_entity: "exchange2".to_string(), amqp_entity_type: None}
+              Binding{pg_channel: "pgchannel1".to_string(), amqp_entity: "exchange1".to_string(), amqp_entity_type: None},
+              Binding{pg_channel: "pgchannel2".to_string(), amqp_entity: "exchange2".to_string(), amqp_entity_type: None}
             ] == parse_bridge_channels("pgchannel1:exchange1,pgchannel2:exchange2"));
     assert!(vec![
-              Bridge{pg_channel: "pgchannel1".to_string(), amqp_entity: "exchange1".to_string(), amqp_entity_type: None},
-              Bridge{pg_channel: "pgchannel2".to_string(), amqp_entity: "exchange2".to_string(), amqp_entity_type: None},
-              Bridge{pg_channel: "pgchannel3".to_string(), amqp_entity: "exchange3".to_string(), amqp_entity_type: None}
+              Binding{pg_channel: "pgchannel1".to_string(), amqp_entity: "exchange1".to_string(), amqp_entity_type: None},
+              Binding{pg_channel: "pgchannel2".to_string(), amqp_entity: "exchange2".to_string(), amqp_entity_type: None},
+              Binding{pg_channel: "pgchannel3".to_string(), amqp_entity: "exchange3".to_string(), amqp_entity_type: None}
             ] == parse_bridge_channels(" pgchannel1 : exchange1 , pgchannel2 : exchange2 , pgchannel3 : exchange3, "));
   }
 
