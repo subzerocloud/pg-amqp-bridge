@@ -233,6 +233,7 @@ fn main() {
                  &TEST_PG_URI.to_string(),
                  &bridge_channels)
   );
+  thread::sleep_ms(2000);
   test::test_main(&args, tests);
   teardown();
 }
