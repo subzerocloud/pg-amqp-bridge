@@ -94,7 +94,7 @@ fn amqp_entity_type(mut channel1: Channel, mut channel2: Channel, amqp_entity: &
                           .map(|_| Type::Exchange).ok();
   channel1.close(200, "").unwrap();
   channel2.close(200, "").unwrap();
-  opt_queue_type.or(opt_exchange_type)
+  opt_exchange_type.or(opt_queue_type)
 }
 
 fn parse_bridge_channels(bridge_channels: &str) -> Vec<Binding>{
