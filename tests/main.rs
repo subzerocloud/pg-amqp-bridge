@@ -16,7 +16,7 @@ use lapin::channel::*;
 use std::env;
 use std::thread;
 use test::*;
-use bridge::start_bridge;
+use bridge::Bridge;
 
 //Lapin doesn't support amqp://localhost// format.
 const TEST_AMQP_URI: &str = "127.0.0.1:5672";
@@ -229,7 +229,7 @@ fn main() {
   add_test(&mut tests, "publishing_to_direct_exchange_works".to_string(), publishing_to_direct_exchange_works);
   add_test(&mut tests, "publishing_to_topic_exchange_works".to_string(), publishing_to_topic_exchange_works);
   thread::spawn(move ||
-    start_bridge(&"amqp://localhost//".to_string(),
+    Bridge::new().start(&"amqp://localhost//".to_string(),
                  &TEST_PG_URI.to_string(),
                  &bridge_channels)
   );

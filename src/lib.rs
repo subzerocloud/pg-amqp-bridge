@@ -24,31 +24,43 @@ struct Binding{
 
 const SEPARATOR: char = '|';
 
-pub fn start_bridge(amqp_uri: &String, pg_uri: &String, bridge_channels: &String){
-  let mut bindings = parse_bridge_channels(bridge_channels);
-  let mut children = Vec::new();
+pub struct Bridge{
+  pub is_ready: bool,
+}
 
-  let mut session = Session::open_url(amqp_uri.as_str()).unwrap();
-  let mut channel_id = 0;
+impl Bridge {
+  pub fn new() -> Bridge {
+    Bridge { is_ready: false }
+  }
+  pub fn start(&mut self, amqp_uri: &String, pg_uri: &String, bridge_channels: &String){
 
-  for binding in &mut bindings{
-    channel_id += 1; let channel1 = session.open_channel(channel_id).unwrap();
-    channel_id += 1; let channel2 = session.open_channel(channel_id).unwrap();
-    let amqp_entity_type = amqp_entity_type(channel1, channel2, &binding.amqp_entity);
-    if amqp_entity_type.is_none(){
-      panic!("The amqp entity {:?} doesn't exist", binding.amqp_entity);
-    }else{
-      binding.amqp_entity_type = amqp_entity_type;
+    let mut bindings = parse_bridge_channels(bridge_channels);
+    let mut children = Vec::new();
+
+    let mut session = Session::open_url(amqp_uri.as_str()).unwrap();
+    let mut channel_id = 0;
+
+    for binding in &mut bindings{
+      channel_id += 1; let channel1 = session.open_channel(channel_id).unwrap();
+      channel_id += 1; let channel2 = session.open_channel(channel_id).unwrap();
+      let amqp_entity_type = amqp_entity_type(channel1, channel2, &binding.amqp_entity);
+      if amqp_entity_type.is_none(){
+        panic!("The amqp entity {:?} doesn't exist", binding.amqp_entity);
+      }else{
+        binding.amqp_entity_type = amqp_entity_type;
+      }
     }
-  }
 
-  for binding in bindings{
-    channel_id += 1; let channel = session.open_channel(channel_id).unwrap();
-    children.push(spawn_listener_publisher(channel, pg_uri.clone(), binding));
-  }
+    self.is_ready = true;
 
-  for child in children{
-    let _ = child.join();
+    for binding in bindings{
+      channel_id += 1; let channel = session.open_channel(channel_id).unwrap();
+      children.push(spawn_listener_publisher(channel, pg_uri.clone(), binding));
+    }
+
+    for child in children{
+      let _ = child.join();
+    }
   }
 }
 
@@ -83,8 +95,8 @@ fn spawn_listener_publisher(mut channel: Channel, pg_uri: String, binding: Bindi
 }
 
 /*
- * Finds the amqp entity type(Queue or Exchange) using two channels because currently rust-amqp hangs up when doing exchange_declare
- * and queue_declare on the samme channel.
+ * Finds the amqp entity type(Queue or Exchange) using two channels because currently rust-amqp hangs up when 
+ * doing exchange_declare and queue_declare on the samme channel.
  * It does this with amqp "passive" set to true.
 */
 fn amqp_entity_type(mut channel1: Channel, mut channel2: Channel, amqp_entity: &String) -> Option<Type>{

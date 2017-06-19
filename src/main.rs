@@ -2,7 +2,7 @@ extern crate env_logger;
 extern crate pgsql_amqp_bridge as bridge;
 
 use std::env;
-use bridge::start_bridge;
+use bridge::Bridge;
 
 #[derive(Debug, Clone)]
 struct Config {
@@ -22,7 +22,7 @@ impl Config {
 }
 
 fn main() {
+  env_logger::init().unwrap();
   let config = Config::new();
-  env_logger::init().expect("Could not initialize logger");
-  start_bridge(&config.amqp_uri, &config.postgresql_uri, &config.bridge_channels);
+  Bridge::new().start(&config.amqp_uri, &config.postgresql_uri, &config.bridge_channels);
 }
