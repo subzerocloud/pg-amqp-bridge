@@ -1,5 +1,5 @@
 extern crate test;
-extern crate pgsql_amqp_bridge as bridge;
+extern crate pg_amqp_bridge as bridge;
 extern crate amq_protocol;
 extern crate futures;
 extern crate tokio_core;

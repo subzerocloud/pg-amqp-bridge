@@ -1,5 +1,5 @@
 extern crate env_logger;
-extern crate pgsql_amqp_bridge as bridge;
+extern crate pg_amqp_bridge as bridge;
 
 use std::env;
 use bridge::Bridge;

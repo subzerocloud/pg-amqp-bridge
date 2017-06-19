@@ -1,5 +1,5 @@
 [package]
-name = "pgsql-amqp-bridge"
+name = "pg-amqp-bridge"
 version = "0.1.0"
 authors = ["steve-chavez <stevechavezast@gmail.com>"]
 
