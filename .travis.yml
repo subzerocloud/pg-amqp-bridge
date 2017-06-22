@@ -1,5 +1,51 @@
+sudo: required
+
 services:
   - postgresql
   - rabbitmq
+  - docker
 
 language: rust
+
+cache:
+ directories:
+  - $TRAVIS_BUILD_DIR/target
+  - $HOME/.cargo
+
+script:
+- |
+  cargo build &&
+  cargo test
+
+before_deploy:
+  - cargo build --release --target=x86_64-unknown-linux-gnu
+  - tar czf pg-amqp-bridge-${TRAVIS_TAG}-x86_64-unknown-linux-gnu.tar.gz -C target/x86_64-unknown-linux-gnu/release pg-amqp-bridge
+  # need to figure our the linker
+  # - rustup target add x86_64-apple-darwin
+  # - rustup target add x86_64-pc-windows-msvc
+  # - cargo build --release --target=x86_64-apple-darwin
+  # - tar czf pg-amqp-bridge-${TRAVIS_TAG}-x86_64-apple-darwin.tar.gz -C target/x86_64-apple-darwin/release pg-amqp-bridge
+  # - cargo build --release --target=x86_64-pc-windows-msvc
+  # - tar czf pg-amqp-bridge-${TRAVIS_TAG}-x86_64-pc-windows-msvc.tar.gz -C target/x86_64-pc-windows-msvc/release pg-amqp-bridge
+
+deploy:
+  provider: releases
+  api_key:
+    secure: OKZ9xtKSOxcPuohryoEhIIMR/8BD6LEscRkq2FTuZbCTmLyfDuZDSvVYaT98ZRWZhdN6sKR2SZi/7jy6mCr7fROTgMrWiJ7YmaDT6Em/GKSwf2SB+CQvkA2oq8OZOUmb7ItpMTf4P/lEl+lMutJmj9b+6SOSuIHd1U32+CUKv+RGWHlgfM8rw7+ry99T6Z/HNrjqLpqztHBe6VgTxBhJBb0utk/cAeNtpS2f/7MVspnb85lPDqlheStCr0FFYW08VayALpWajp6ssDiRkL8MjlJgyPnTewhARCep5M4yHKEOcGzrZiuGFPx8ClSTpFHL+M48RfjniJmKTJTMfn0B2VTc2SkJlDbu3UUSvdqOX9RRvttbeavSiAWOZRem0QAhzSPBQ+q2yvq2KPicT1uqWttkLgQPBbZxI0Ty/5+PZD6j+9IwZAr9ykCFr1KstIwiJU9dozVwHeUx6B06lEliohd/18q2CGzFK26PBYHtZ6MLugRWNL7oLkEGJJkS8Es+YK+V21RfZEN7FpaTNsJEICqm/doh4HZwZaLzRPqOOdjEIxpjxBS4VI1G/9q2BjTvRcPZByZ0K/w+8UziN9PILMZSxl03lcfdS6Sbjo57veML8aR3Tp/L8gbyNuQnYp9ggL5dA+vHpTZqTwz4UG8ig3lLwYDrZVer/CQAHEY49aE=
+  file: 
+    - pg-amqp-bridge-${TRAVIS_TAG}-x86_64-unknown-linux-gnu.tar.gz
+    # - pg-amqp-bridge-${TRAVIS_TAG}-x86_64-apple-darwin.tar.gz
+    # - pg-amqp-bridge-${TRAVIS_TAG}-x86_64-x86_64-pc-windows-msvc.tar.gz
+  on:
+    repo: subzerocloud/pg-amqp-bridge
+    tags: true
+    condition: "$TRAVIS_OS_NAME = linux"
+  skip_cleanup: true
+
+after_deploy:
+  - docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD";
+    docker build --build-arg VERSION=${TRAVIS_TAG} -t pg-amqp-bridge .;
+    docker tag pg-amqp-bridge:latest subzerocloud/pg-amqp-bridge:latest;
+    docker tag pg-amqp-bridge:latest subzerocloud/pg-amqp-bridge:${TRAVIS_TAG};
+    docker push subzerocloud/pg-amqp-bridge:${TRAVIS_TAG};
+    docker push subzerocloud/pg-amqp-bridge:latest;
