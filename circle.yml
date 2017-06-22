@@ -23,8 +23,11 @@ deployment:
     commands:
       - mkdir -p dist
       - docker run -it --net=host --rm -v $(pwd):/source -w /source --rm=false jimmycuadra/rust cargo build --target x86_64-unknown-linux-gnu --release
-      - gzip -c target/x86_64-unknown-linux-gnu/release/pg-amqp-bridge > dist/pg-amqp-bridge-$CIRCLE_TAG.gz
+      - gzip target/x86_64-unknown-linux-gnu/release/pg-amqp-bridge
+      - mv target/x86_64-unknown-linux-gnu/release/pg-amqp-bridge.gz dist/pg-amqp-bridge-$CIRCLE_TAG-linux.gz
       - ghr -t $GITHUB_TOKEN -u $CIRCLE_PROJECT_USERNAME -r $CIRCLE_PROJECT_REPONAME --replace $CIRCLE_TAG dist/
       - docker build -t pg-amqp-bridge .
       - docker tag pg-amqp-bridge:latest subzerocloud/pg-amqp-bridge:latest
+      - docker tag pg-amqp-bridge:latest subzerocloud/pg-amqp-bridge:$CIRCLE_TAG
       - docker push subzerocloud/pg-amqp-bridge:latest
+      - docker push subzerocloud/pg-amqp-bridge:$CIRCLE_TAG
