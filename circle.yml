@@ -1,7 +1,30 @@
 machine:
   services:
     - docker
+    - rabbitmq-server
+
+dependencies:
+  cache_directories:
+    - "target"
+  pre:
+    # - $( aws ecr get-login --region $AWS_DEFAULT_REGION )
+    - docker login -e $DOCKER_EMAIL -u $DOCKER_USER -p $DOCKER_PASS
+    - docker pull jimmycuadra/rust
+    - go get -u github.com/tcnksm/ghr
 
 test:
   override:
-    - docker run -it --net=host --rm -v $(pwd):/source -w /source jimmycuadra/rust cargo test --release
+    - docker run -it --net=host --rm -v $(pwd):/source -w /source --rm=false jimmycuadra/rust cargo test --target x86_64-unknown-linux-gnu --release
+
+deployment:
+  release:
+    tag: /v[0-9]+(\.[0-9]+)*/
+    owner: subzerocloud
+    commands:
+      - mkdir -p dist
+      - docker run -it --net=host --rm -v $(pwd):/source -w /source --rm=false jimmycuadra/rust cargo build --target x86_64-unknown-linux-gnu --release
+      - gzip -c target/x86_64-unknown-linux-gnu/release/pg-amqp-bridge > dist/pg-amqp-bridge-$CIRCLE_TAG.gz
+      - ghr -t $GITHUB_TOKEN -u $CIRCLE_PROJECT_USERNAME -r $CIRCLE_PROJECT_REPONAME --replace $CIRCLE_TAG dist/
+      - docker build -t pg-amqp-bridge .
+      - docker tag pg-amqp-bridge:latest subzerocloud/pg-amqp-bridge:latest
+      - docker push subzerocloud/pg-amqp-bridge:latest
