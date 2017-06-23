@@ -25,8 +25,8 @@ Configuration is done through environment variables:
 ## Running in console 
 #### Install
 ```shell
-VERSION=0.0.1 && \
-PLATFORM=x86_64-unknown-linux-gnu && \
+VERSION=0.0.1 \
+PLATFORM=x86_64-unknown-linux-gnu \
 curl -SLO https://github.com/subzerocloud/pg-amqp-bridge/releases/download/${VERSION}/pg-amqp-bridge-${VERSION}-${PLATFORM}.tar.gz && \
 tar zxf pg-amqp-bridge-${VERSION}-${PLATFORM}.tar.gz && \
 mv pg-amqp-bridge /usr/local/bin
@@ -42,38 +42,11 @@ pg-amqp-bridge
 ## Running as docker container
 
 ```shell
-docker run -d \
--e POSTGRESQL_URI="postgres://postgres@database" \
--e AMQP_URI="amqp://rabbitmq//" \
+docker run --rm -it --net=host \
+-e POSTGRESQL_URI="postgres://postgres@localhost" \
+-e AMQP_URI="amqp://localhost//" \
 -e BRIDGE_CHANNELS="pgchannel1:task_queue,pgchannel2:direct_exchange,pgchannel3:topic_exchange" \
---add-host database:DB_IP_ADDRESS \
---add-host rabbitmq:RABBITMQ_IP_ADDRESS \
 subzerocloud/pg-amqp-bridge
-```
-
-## Running from source
-
-#### Install Rust
-
-```shell
-curl https://sh.rustup.rs -sSf | sh
-```
-
-#### Run
-
-```shell
-POSTGRESQL_URI="postgres://postgres@localhost" \
-AMQP_URI="amqp://localhost//" \
-BRIDGE_CHANNELS="pgchannel1:task_queue,pgchannel2:direct_exchange,pgchannel3:topic_exchange" \
-cargo run
-```
-
-#### Test
-
-**Note**: RabbitMQ and PostgreSQL need to be running on your localhost
-
-```shell
-cargo test
 ```
 
 ## Sending messages
@@ -119,7 +92,6 @@ NOTIFY pgchannel3, '*.orange|Topic message';
 NOTIFY pgchannel3, 'quick.brown.fox|Topic message';
 NOTIFY pgchannel3, 'lazy.#|Topic message';
 ```
-
 
 ## Helper Functions
 
@@ -168,9 +140,30 @@ after insert or update or delete on tablename
 for each row execute procedure rabbitmq.on_row_change();
 ```
 
-## Author
+## Running from source
 
-Steve Chavez
+#### Install Rust
+
+```shell
+curl https://sh.rustup.rs -sSf | sh
+```
+
+#### Run
+
+```shell
+POSTGRESQL_URI="postgres://postgres@localhost" \
+AMQP_URI="amqp://localhost//" \
+BRIDGE_CHANNELS="pgchannel1:task_queue,pgchannel2:direct_exchange,pgchannel3:topic_exchange" \
+cargo run
+```
+
+#### Test
+
+**Note**: RabbitMQ and PostgreSQL need to be running on your localhost
+
+```shell
+cargo test
+```
 
 ## Contributing
 
