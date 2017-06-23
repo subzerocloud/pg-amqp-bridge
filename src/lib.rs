@@ -37,7 +37,7 @@ impl Bridge {
     let mut bindings = parse_bridge_channels(bridge_channels);
     let mut children = Vec::new();
 
-    let mut session = Session::open_url(amqp_uri.as_str()).unwrap();
+    let mut session = Session::open_url(amqp_uri.as_str()).expect("Could not connect to AMQP server");
     let mut channel_id = 0;
 
     for binding in &mut bindings{
