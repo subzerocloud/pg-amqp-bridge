@@ -18,4 +18,4 @@ RUN DEBIAN_FRONTEND="noninteractive" && BUILD_DEPS="curl libssl-dev xz-utils" &&
     apt-get -qq clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-CMD exec pgsql-amqp-bridge
+CMD exec pg-amqp-bridge
