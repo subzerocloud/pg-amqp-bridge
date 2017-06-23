@@ -1,8 +1,26 @@
 # PostgreSQL to AMQP bridge 
 
-Send messages to RabbitMQ from PostgreSQL
+#### Send messages to RabbitMQ from PostgreSQL
+
 
 ![pg-amqp-bridge](/pg-amqp-bridge.gif?raw=true "pg-amqp-bridge")
+
+## But Why?
+
+This tool enables a decoupled architecture, think sending emails when user signs up. Instead of having explicit code in your `signup` function that does the work (and slows down your response), you just have to worry about inserting the row to the database. After this, a database trigger (see below) will generate an event which gets sent to RabbitMQ. From there, you can have multiple consumers reacting to that event (send signup email, send sms notification to you). Those consumers tend to be very short, self contained scripts which can be written in a language different from your code-base (for example bash scripts) if that makes sense to you.
+
+The larger purpose is to enable the development of backends arround [PostgREST](https://postgrest.com)/[subZero](https://subzero.cloud/) philosophy. Check out the [PostgREST Starter Kit](https://github.com/subzerocloud/postgrest-starter-kit) for more details 
+
+## Configuration
+
+Configuration is done through environment variables:
+
+- **POSTGRESQL_URI**: e.g. `postgresql://username:password@domain.tld:port/database`
+- **AMQP_URI**: e.g. `amqp://rabbitmq//`
+- **BRIDGE_CHANNELS**: e.g. `pgchannel1:task_queue,pgchannel2:direct_exchange,pgchannel3:topic_exchange`
+
+**Note:** It's recommended to always use the same name for postgresql channel and exchange/queue in `BRIDGE_CHANNELS`, for example
+`app_events:app_events,table_changes:tables_changes`
 
 ## Running in console 
 #### Install
@@ -50,7 +68,7 @@ BRIDGE_CHANNELS="pgchannel1:task_queue,pgchannel2:direct_exchange,pgchannel3:top
 cargo run
 ```
 
-## Test
+#### Test
 
 **Note**: RabbitMQ and PostgreSQL need to be running on your localhost
 
@@ -107,8 +125,6 @@ NOTIFY pgchannel3, 'lazy.#|Topic message';
 
 To make sending messages a bit easier you can setup the following functions in your database
 
-**Note**: although in the documentation we use `pgchannel2:direct_exchange` to be clear which is which, we recomment that the name of the channel always matches the exchange/queue name.
-
 ```sql
 create schema rabbitmq;
 
@@ -155,6 +171,15 @@ for each row execute procedure rabbitmq.on_row_change();
 ## Author
 
 Steve Chavez
+
+## Contributing
+
+Anyone and everyone is welcome to contribute.
+
+## Support
+
+* [Slack](https://slack.subzero.cloud/) — Watch announcements, share ideas and feedback
+* [GitHub Issues](https://github.com/subzerocloud/pg-amqp-bridge/issues) — Check open issues, send feature requests
 
 ## License
 
