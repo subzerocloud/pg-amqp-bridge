@@ -15,11 +15,13 @@ use lapin::client::*;
 use lapin::channel::*;
 use std::env;
 use std::thread;
+use std::time::Duration;
 use test::*;
 use bridge::Bridge;
 
 //Lapin doesn't support amqp://localhost// format.
-const TEST_AMQP_URI: &str = "127.0.0.1:5672";
+const TEST_AMQP_HOST_PORT: &str = "127.0.0.1:5672";
+const TEST_AMQP_URI: &str = "amqp://localhost//";
 const TEST_PG_URI: &str = "postgres://postgres@localhost";
 
 const TEST_1_PG_CHANNEL: &str = "test_1_pgchannel";
@@ -42,7 +44,7 @@ const TEST_3_EXCHANGE: &str = "test_3_topic_exchange";
 fn publishing_to_queue_works() {
   let mut core = Core::new().unwrap();
   let handle = core.handle();
-  let addr = TEST_AMQP_URI.parse().unwrap();
+  let addr = TEST_AMQP_HOST_PORT.parse().unwrap();
 
   let pg_conn = Connection::connect(TEST_PG_URI, TlsMode::None).unwrap();
 
@@ -71,7 +73,7 @@ fn publishing_to_queue_works() {
 fn publishing_to_direct_exchange_works() {
   let mut core = Core::new().unwrap();
   let handle = core.handle();
-  let addr = TEST_AMQP_URI.parse().unwrap();
+  let addr = TEST_AMQP_HOST_PORT.parse().unwrap();
 
   let pg_conn = Connection::connect(TEST_PG_URI, TlsMode::None).unwrap();
 
@@ -109,7 +111,7 @@ fn publishing_to_direct_exchange_works() {
 fn publishing_to_topic_exchange_works() {
   let mut core = Core::new().unwrap();
   let handle = core.handle();
-  let addr = TEST_AMQP_URI.parse().unwrap();
+  let addr = TEST_AMQP_HOST_PORT.parse().unwrap();
 
   let pg_conn = Connection::connect(TEST_PG_URI, TlsMode::None).unwrap();
 
@@ -152,7 +154,7 @@ fn publishing_to_topic_exchange_works() {
 fn setup(){
   let mut core = Core::new().unwrap();
   let handle = core.handle();
-  let addr = TEST_AMQP_URI.parse().unwrap();
+  let addr = TEST_AMQP_HOST_PORT.parse().unwrap();
 
   let _ = core.run(
     TcpStream::connect(&addr, &handle)
@@ -187,7 +189,7 @@ fn setup(){
 fn teardown(){
   let mut core = Core::new().unwrap();
   let handle = core.handle();
-  let addr = TEST_AMQP_URI.parse().unwrap();
+  let addr = TEST_AMQP_HOST_PORT.parse().unwrap();
 
   let _ = core.run(
     TcpStream::connect(&addr, &handle)
@@ -229,11 +231,11 @@ fn main() {
   add_test(&mut tests, "publishing_to_direct_exchange_works".to_string(), publishing_to_direct_exchange_works);
   add_test(&mut tests, "publishing_to_topic_exchange_works".to_string(), publishing_to_topic_exchange_works);
   thread::spawn(move ||
-    Bridge::new().start(&"amqp://localhost//".to_string(),
-                 &TEST_PG_URI.to_string(),
-                 &bridge_channels)
+    Bridge::new().start(&TEST_AMQP_URI.to_string(),
+                        &TEST_PG_URI.to_string(),
+                        &bridge_channels)
   );
-  thread::sleep_ms(2000);
+  thread::sleep(Duration::from_secs(2));
   test::test_main(&args, tests);
   teardown();
 }
