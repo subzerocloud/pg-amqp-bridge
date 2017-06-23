@@ -8,6 +8,7 @@ use postgres::*;
 use std::default::Default;
 use std::thread;
 use std::thread::JoinHandle;
+use std::time::Duration;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 enum Type {
@@ -37,7 +38,24 @@ impl Bridge {
     let mut bindings = parse_bridge_channels(bridge_channels);
     let mut children = Vec::new();
 
-    let mut session = Session::open_url(amqp_uri.as_str()).expect("Could not connect to AMQP server");
+    println!("Attempting to connect to AMQP server..");
+    let mut session = {
+      let mut s = Session::open_url(amqp_uri.as_str());
+      // Retry with cyclic exponential backoff
+      let mut i = 1;
+      while let Err(e)  = s {
+        println!("{:?}", e);
+        let time = Duration::from_secs(i);
+        println!("Retrying the AMQP connection in {:?} seconds..", time.as_secs());
+        thread::sleep(time);
+        s = Session::open_url(amqp_uri.as_str());
+        i *= 2;
+        if i > 32 { i = 1 };
+      };
+      s.unwrap()
+    };
+    println!("Connection to AMQP server successful");
+
     let mut channel_id = 0;
 
     for binding in &mut bindings{
