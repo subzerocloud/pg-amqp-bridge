@@ -3,13 +3,14 @@
 #### Send messages to RabbitMQ from PostgreSQL
 
 
-![pg-amqp-bridge](/pg-amqp-bridge.gif?raw=true "pg-amqp-bridge")
+![pg-amqp-bridge](/media/pg-amqp-bridge.gif?raw=true "pg-amqp-bridge")
 
-## But Why?
+## But Why? ![why](/media/but-why.gif?raw=true "why?")
 
-This tool enables a decoupled architecture, think sending emails when user signs up. Instead of having explicit code in your `signup` function that does the work (and slows down your response), you just have to worry about inserting the row to the database. After this, a database trigger (see below) will generate an event which gets sent to RabbitMQ. From there, you can have multiple consumers reacting to that event (send signup email, send sms notification to you). Those consumers tend to be very short, self contained scripts which can be written in a language different from your code-base (for example bash scripts) if that makes sense to you.
+This tool enables a decoupled architecture, think sending emails when a user signs up. Instead of having explicit code in your `signup` function that does the work (and slows down your response), you just have to worry about inserting the row into the database. After this, a database trigger (see below) will generate an event which gets sent to RabbitMQ. From there, you can have multiple consumers reacting to that event (send signup email, send sms notification). Those consumers tend to be very short, self contained scripts.
+If you pair **pg-amqp-bridge**  and the [Web STOMP](https://www.rabbitmq.com/web-stomp.html) plugin for RabbitMQ , you can enable real time updates with almost zero code.
 
-The larger purpose is to enable the development of backends arround [PostgREST](https://postgrest.com)/[subZero](https://subzero.cloud/) philosophy. Check out the [PostgREST Starter Kit](https://github.com/subzerocloud/postgrest-starter-kit) for more details 
+The larger goal is to enable the development of backends around [PostgREST](https://postgrest.com)/[subZero](https://subzero.cloud/) philosophy. Check out the [PostgREST Starter Kit](https://github.com/subzerocloud/postgrest-starter-kit) to see how `pg-amqp-bridge` fits in a larger project.
 
 ## Configuration
 
