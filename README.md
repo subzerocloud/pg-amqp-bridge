@@ -181,5 +181,3 @@ Copyright © 2017-present subZero Cloud, LLC.<br />
 This source code is licensed under [MIT](https://github.com/subzerocloud/pg-amqp-bridge/blob/master/LICENSE.txt) license<br />
 The documentation to the project is licensed under the [CC BY-SA 4.0](http://creativecommons.org/licenses/by-sa/4.0/) license.
 
-[![Analytics](https://ga-beacon.appspot.com/UA-79996734-2/pg-amqp-bridge/readme?pixel&useReferer)](https://github.com/igrigorik/ga-beacon)
-
