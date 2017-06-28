@@ -175,6 +175,10 @@ Anyone and everyone is welcome to contribute.
 * [Slack](https://slack.subzero.cloud/) — Watch announcements, share ideas and feedback
 * [GitHub Issues](https://github.com/subzerocloud/pg-amqp-bridge/issues) — Check open issues, send feature requests
 
+## Credits
+
+Inspired by [@FGRibreau](https://github.com/FGRibreau/postgresql-to-amqp)'s work
+
 ## License
 
 Copyright © 2017-present subZero Cloud, LLC.<br />
