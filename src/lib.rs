@@ -34,14 +34,14 @@ impl Bridge {
   pub fn new() -> Bridge {
     Bridge { is_ready: false }
   }
-  pub fn start(&mut self, amqp_uri: &String, pg_uri: &String, bridge_channels: &String){
+  pub fn start(&mut self, amqp_uri: &str, pg_uri: &String, bridge_channels: &str){
 
     let mut bindings = parse_bridge_channels(bridge_channels);
     let mut children = Vec::new();
 
     println!("Attempting to connect to AMQP server..");
     let mut session = {
-      let mut s = Session::open_url(amqp_uri.as_str());
+      let mut s = Session::open_url(amqp_uri);
       // Retry with cyclic exponential backoff
       let mut i = 1;
       while let Err(e)  = s {
@@ -49,7 +49,7 @@ impl Bridge {
         let time = Duration::from_secs(i);
         println!("Retrying the AMQP connection in {:?} seconds..", time.as_secs());
         thread::sleep(time);
-        s = Session::open_url(amqp_uri.as_str());
+        s = Session::open_url(amqp_uri);
         i *= 2;
         if i > 32 { i = 1 };
       };
@@ -118,10 +118,10 @@ fn spawn_listener_publisher(mut channel: Channel, pg_uri: String, binding: Bindi
  * doing exchange_declare and queue_declare on the samme channel.
  * It does this with amqp "passive" set to true.
 */
-fn amqp_entity_type(mut channel1: Channel, mut channel2: Channel, amqp_entity: &String) -> Option<Type>{
+fn amqp_entity_type(mut channel1: Channel, mut channel2: Channel, amqp_entity: &str) -> Option<Type>{
   let opt_queue_type = channel1.queue_declare(amqp_entity.clone(), true, false, false, false, false, Table::new())
                        .map(|_| Type::Queue).ok();
-  let opt_exchange_type = channel2.exchange_declare(amqp_entity.clone(), "".to_string(), true, false, false, false, false, Table::new())
+  let opt_exchange_type = channel2.exchange_declare(amqp_entity, "", true, false, false, false, false, Table::new())
                           .map(|_| Type::Exchange).ok();
   channel1.close(200, "").unwrap();
   channel2.close(200, "").unwrap();
