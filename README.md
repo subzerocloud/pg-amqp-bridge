@@ -50,6 +50,8 @@ docker run --rm -it --net=host \
 subzerocloud/pg-amqp-bridge
 ```
 
+You can enable logging of the forwarded messages with the ```RUST_LOG=info``` environment variable.
+
 ## Sending messages
 **Note**: the bridge doesn't declare exchanges or queues, if they aren't previoulsy declared it will exit with an error.
 
@@ -62,12 +64,6 @@ NOTIFY pgchannel1, 'Task message';
 
 Since ```pgchannel1``` is bound to ```task_queue``` in BRIDGE_CHANNELS ```'Task message'``` will be sent to ```task_queue```.
 
-The following message is shown in the console :
-
-```bash
-Forwarding "Task message" from pg channel "pgchannel" to Queue "task_queue" with routing key "" 
-```
-
 #### Sending messages to a direct exchange
 
 You can specify a routing key with the format ```routing_key|message```:
@@ -77,12 +73,6 @@ NOTIFY pgchannel2, 'direct_key|Direct message';
 ```
 
 Since there is a ```pgchannel2:direct_exchange``` declared in BRIDGE_CHANNELS ```'Direct message'``` will be sent to ```direct_exchange``` with a routing key of ```direct_key```.
-
-This message is shown:
-
-```bash
-Forwarding "Direct message" from pg channel "pgchannel2" to Exchange "direct_exchange" with routing key "direct_key" 
-```
 
 #### Sending messages to a topic exchange
 

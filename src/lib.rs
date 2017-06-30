@@ -1,6 +1,7 @@
 extern crate amqp;
 extern crate fallible_iterator;
 extern crate postgres;
+#[macro_use] extern crate log;
 
 use amqp::{Session, Basic, protocol, Channel, Table};
 use fallible_iterator::FallibleIterator;
@@ -106,8 +107,8 @@ fn spawn_listener_publisher(mut channel: Channel, pg_uri: String, binding: Bindi
       channel.basic_publish(exchange, key, true, false,
                             protocol::basic::BasicProperties{ content_type: Some("text".to_string()), ..Default::default()},
                             message.as_bytes().to_vec()).unwrap();
-      println!("Forwarding {:?} from pg channel {:?} to {:?} {:?} with routing key {:?} ",
-               message, binding.pg_channel, amqp_entity_type, binding.amqp_entity, routing_key);
+      info!("{:?} -> {:?} {:?} ( routing_key: {:?}, message: {:?} )",
+               binding.pg_channel, amqp_entity_type, binding.amqp_entity, routing_key, message);
     }
   })
 }
