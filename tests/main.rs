@@ -1,18 +1,17 @@
 extern crate test;
 extern crate pg_amqp_bridge as bridge;
-extern crate amq_protocol;
 extern crate futures;
 extern crate tokio_core;
 extern crate lapin_futures as lapin;
 extern crate postgres;
 
-use amq_protocol::types::FieldTable;
 use postgres::{Connection, TlsMode};
 use futures::*;
 use tokio_core::reactor::Core;
 use tokio_core::net::TcpStream;
 use lapin::client::*;
 use lapin::channel::*;
+use lapin::types::FieldTable;
 use std::env;
 use std::thread;
 use std::time::Duration;
@@ -90,7 +89,8 @@ fn publishing_to_direct_exchange_works() {
                                           &ExchangeDeclareOptions{
                                             passive: false, durable: false,
                                             auto_delete: true, internal: false,
-                                            nowait: false
+                                            nowait: false,
+                                            ..Default::default()
                                           }, FieldTable::new())
         .and_then(move |_| channel.queue_bind(TEST_2_QUEUE, TEST_2_EXCHANGE, "test_direct_key", &QueueBindOptions::default(), FieldTable::new()))
       )
@@ -128,7 +128,8 @@ fn publishing_to_topic_exchange_works() {
                                 &ExchangeDeclareOptions{
                                   passive: false, durable: false,
                                   auto_delete: true, internal: false,
-                                  nowait: false
+                                  nowait: false,
+                                  ..Default::default()
                                 }, FieldTable::new())
         .and_then(move |_| channel.queue_bind(TEST_3_QUEUE, TEST_3_EXCHANGE, "*.critical", &QueueBindOptions::default(), FieldTable::new()))
       )
@@ -169,7 +170,8 @@ fn setup(){
                                    durable: false,
                                    auto_delete: true,
                                    internal: false,
-                                   nowait: false
+                                   nowait: false,
+                                   ..Default::default()
                                  }, FieldTable::new())
         .and_then(move |_|
           channel.exchange_declare(TEST_3_EXCHANGE, "topic", 
@@ -178,7 +180,8 @@ fn setup(){
                                      durable: false,
                                      auto_delete: true,
                                      internal: false,
-                                     nowait: false
+                                     nowait: false,
+                                     ..Default::default()
                                    }, FieldTable::new())
         )
       )
