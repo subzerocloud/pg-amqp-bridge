@@ -15,7 +15,7 @@ log = "0.3.7"
 postgres = "0.14.1"
 
 [dev-dependencies]
-rustc-test = "0.1"
+rustc-test = "0.2.0"
 futures = "0.1.12"
 lapin-futures = "0.9.0"
 tokio-core = "0.1.6"
