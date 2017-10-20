@@ -215,7 +215,8 @@ fn add_test<F: FnOnce() + Send + 'static>(tests: &mut Vec<TestDescAndFn>, name: 
     desc: TestDesc {
       name: test::DynTestName(name),
       ignore: false,
-      should_panic: test::ShouldPanic::No
+      should_panic: test::ShouldPanic::No,
+      allow_fail: false
     },
     testfn: TestFn::dyn_test_fn(test)
   });
