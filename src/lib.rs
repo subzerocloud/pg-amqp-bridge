@@ -34,7 +34,7 @@ impl Bridge {
   pub fn new() -> Bridge {
     Bridge { is_ready: false }
   }
-  pub fn start(&mut self, amqp_uri: &str, pg_uri: &String, bridge_channels: &str){
+  pub fn start(&mut self, amqp_uri: &str, pg_uri: &String, bridge_channels: &str, delivery_mode: &str){
 
     let mut bindings = parse_bridge_channels(bridge_channels);
     let mut children = Vec::new();
@@ -74,7 +74,7 @@ impl Bridge {
 
     for binding in bindings{
       channel_id += 1; let channel = session.open_channel(channel_id).unwrap();
-      children.push(spawn_listener_publisher(channel, pg_uri.clone(), binding));
+      children.push(spawn_listener_publisher(channel, pg_uri.clone(), binding, delivery_mode.to_owned()));
     }
 
     for child in children{
@@ -83,7 +83,7 @@ impl Bridge {
   }
 }
 
-fn spawn_listener_publisher(mut channel: Channel, pg_uri: String, binding: Binding) -> JoinHandle<()>{
+fn spawn_listener_publisher(mut channel: Channel, pg_uri: String, binding: Binding, delivery_mode: String) -> JoinHandle<()>{
   thread::spawn(move ||{
     let pg_conn = Connection::connect(pg_uri, TlsMode::None).expect("Could not connect to PostgreSQL");
 
@@ -97,6 +97,11 @@ fn spawn_listener_publisher(mut channel: Channel, pg_uri: String, binding: Bindi
 
     let amqp_entity_type = binding.amqp_entity_type.unwrap();
 
+    let persistence = match delivery_mode.to_uppercase().as_ref() {
+      "PERSISTENT" => 2,
+      _ => 1,
+    };
+
     while let Ok(Some(notification)) = it.next() {
       let (routing_key, message) = parse_notification(&notification.payload);
       let (exchange, key) =  if amqp_entity_type == Type::Exchange {
@@ -105,7 +110,7 @@ fn spawn_listener_publisher(mut channel: Channel, pg_uri: String, binding: Bindi
                                ("", binding.amqp_entity.as_str())
                              };
       channel.basic_publish(exchange, key, true, false,
-                            protocol::basic::BasicProperties{ content_type: Some("text".to_string()), ..Default::default()},
+                            protocol::basic::BasicProperties{ content_type: Some("text".to_string()), delivery_mode: Some(persistence), ..Default::default()},
                             message.as_bytes().to_vec()).unwrap();
       info!("{:?} -> {:?} {:?} ( routing_key: {:?}, message: {:?} )",
                binding.pg_channel, amqp_entity_type, binding.amqp_entity, routing_key, message);
