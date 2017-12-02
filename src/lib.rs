@@ -101,6 +101,7 @@ fn spawn_listener_publisher(mut channel: Channel, pg_uri: String, binding: Bindi
       "PERSISTENT" => 2,
       _ => 1,
     };
+  
 
     while let Ok(Some(notification)) = it.next() {
       let (routing_key, message) = parse_notification(&notification.payload);
@@ -215,3 +216,4 @@ mod tests {
     assert!(catch_unwind(|| parse_bridge_channels("pgchannel2, pgchannel2")).is_err());
   }
 }
+

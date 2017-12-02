@@ -28,3 +28,4 @@ fn main() {
   let config = Config::new();
   Bridge::new().start(&config.amqp_uri, &config.postgresql_uri, &config.bridge_channels, &config.delivery_mode);
 }
+
