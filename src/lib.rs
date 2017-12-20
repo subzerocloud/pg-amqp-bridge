@@ -39,23 +39,9 @@ impl Bridge {
     let mut bindings = parse_bridge_channels(bridge_channels);
     let mut children = Vec::new();
 
-    println!("Attempting to connect to AMQP server..");
-    let mut session = {
-      let mut s = Session::open_url(amqp_uri);
-      // Retry with cyclic exponential backoff
-      let mut i = 1;
-      while let Err(e)  = s {
-        println!("{:?}", e);
-        let time = Duration::from_secs(i);
-        println!("Retrying the AMQP connection in {:?} seconds..", time.as_secs());
-        thread::sleep(time);
-        s = Session::open_url(amqp_uri);
-        i *= 2;
-        if i > 32 { i = 1 };
-      };
-      s.unwrap()
-    };
-    println!("Connection to AMQP server successful");
+    let mut session = wait_for_amqp_session(amqp_uri);
+
+    wait_for_pg_connection(pg_uri);
 
     let mut channel_id = 0;
 
@@ -81,6 +67,42 @@ impl Bridge {
       let _ = child.join();
     }
   }
+}
+
+fn wait_for_amqp_session(amqp_uri: &str) -> Session {
+  println!("Attempting to connect to AMQP server..");
+  let mut s = Session::open_url(amqp_uri);
+  // Retry with cyclic exponential backoff
+  let mut i = 1;
+  while let Err(e)  = s {
+    println!("{:?}", e);
+    let time = Duration::from_secs(i);
+    println!("Retrying the AMQP connection in {:?} seconds..", time.as_secs());
+    thread::sleep(time);
+    s = Session::open_url(amqp_uri);
+    i *= 2;
+    if i > 32 { i = 1 };
+  };
+  println!("Connection to AMQP server successful");
+  s.unwrap()
+}
+
+fn wait_for_pg_connection(pg_uri: &String){
+  println!("Attempting to connect to PostgreSQL..");
+  let mut pg_conn = Connection::connect(pg_uri.to_owned(), TlsMode::None);
+  // Retry with cyclic exponential backoff
+  let mut i = 1;
+  while let Err(e)  = pg_conn {
+    println!("{:?}", e);
+    let time = Duration::from_secs(i);
+    println!("Retrying the PostgreSQL connection in {:?} seconds..", time.as_secs());
+    thread::sleep(time);
+    pg_conn = Connection::connect(pg_uri.to_owned(), TlsMode::None);
+    i *= 2;
+    if i > 32 { i = 1 };
+  };
+  let _ = pg_conn.unwrap().finish();
+  println!("Connection to PostgreSQL successful");
 }
 
 fn spawn_listener_publisher(mut channel: Channel, pg_uri: String, binding: Binding, delivery_mode: u8) -> JoinHandle<()>{
