@@ -231,7 +231,6 @@ fn main() {
                                 TEST_2_PG_CHANNEL, TEST_2_EXCHANGE,
                                 TEST_3_PG_CHANNEL, TEST_3_EXCHANGE);
 
-  let delivery_mode: &str = "PERSISTENT";
   setup();
   add_test(&mut tests, "publishing_to_queue_works".to_string(), publishing_to_queue_works);
   add_test(&mut tests, "publishing_to_direct_exchange_works".to_string(), publishing_to_direct_exchange_works);
@@ -239,8 +238,7 @@ fn main() {
   thread::spawn(move ||
     Bridge::new().start(&TEST_AMQP_URI.to_string(),
                         &TEST_PG_URI.to_string(),
-                        &bridge_channels,
-                        &delivery_mode)
+                        &bridge_channels, &(1 as u8))
   );
   thread::sleep(Duration::from_secs(2));
   test::test_main(&args, tests);
