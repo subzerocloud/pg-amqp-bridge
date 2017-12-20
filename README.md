@@ -19,7 +19,7 @@ Configuration is done through environment variables:
 - **POSTGRESQL_URI**: e.g. `postgresql://username:password@domain.tld:port/database`
 - **AMQP_URI**: e.g. `amqp://rabbitmq//`
 - **BRIDGE_CHANNELS**: e.g. `pgchannel1:task_queue,pgchannel2:direct_exchange,pgchannel3:topic_exchange`
-- **DELIVERY_MODE**: e.g. `PERSISTENT`, `NON-PERSISTENT`
+- **DELIVERY_MODE**: can be `PERSISTENT` or `NON-PERSISTENT`, default is `NON-PERSISTENT`
 
 **Note:** It's recommended to always use the same name for postgresql channel and exchange/queue in `BRIDGE_CHANNELS`, for example
 `app_events:app_events,table_changes:tables_changes`
@@ -38,7 +38,6 @@ mv pg-amqp-bridge /usr/local/bin
 POSTGRESQL_URI="postgres://postgres@localhost" \
 AMQP_URI="amqp://localhost//" \
 BRIDGE_CHANNELS="pgchannel1:task_queue,pgchannel2:direct_exchange,pgchannel3:topic_exchange" \
-DELIVERY_MODE="NON-PERSISTENT" \
 pg-amqp-bridge
 ```
 
@@ -49,7 +48,6 @@ docker run --rm -it --net=host \
 -e POSTGRESQL_URI="postgres://postgres@localhost" \
 -e AMQP_URI="amqp://localhost//" \
 -e BRIDGE_CHANNELS="pgchannel1:task_queue,pgchannel2:direct_exchange,pgchannel3:topic_exchange" \
--e DELIVERY_MODE="NON-PERSISTENT" \
 subzerocloud/pg-amqp-bridge
 ```
 
@@ -148,7 +146,6 @@ curl https://sh.rustup.rs -sSf | sh
 POSTGRESQL_URI="postgres://postgres@localhost" \
 AMQP_URI="amqp://localhost//" \
 BRIDGE_CHANNELS="pgchannel1:task_queue,pgchannel2:direct_exchange,pgchannel3:topic_exchange" \
-DELIVERY_MODE="NON-PERSISTENT" \
 cargo run
 ```
 

@@ -9,7 +9,7 @@ struct Config {
   postgresql_uri: String,
   amqp_uri: String,
   bridge_channels: String,
-  delivery_mode: String,
+  delivery_mode: u8,
 }
 
 impl Config {
@@ -18,7 +18,13 @@ impl Config {
       postgresql_uri: env::var("POSTGRESQL_URI").expect("POSTGRESQL_URI environment variable must be defined"),
       amqp_uri: env::var("AMQP_URI").expect("AMQP_URI environment variable must be defined"),
       bridge_channels: env::var("BRIDGE_CHANNELS").expect("BRIDGE_CHANNELS environment variable must be defined"),
-      delivery_mode: env::var("DELIVERY_MODE").expect("DELIVERY_MODE environment variable must be defined"),
+      delivery_mode:
+        match env::var("DELIVERY_MODE").ok().as_ref().map(String::as_ref){
+          None => 1,
+          Some("NON-PERSISTENT") => 1,
+          Some("PERSISTENT") => 2,
+          Some(_) => panic!("DELIVERY_MODE environment variable can only be PERSISTENT or NON-PERSISTENT")
+        }
     }
   }
 }
