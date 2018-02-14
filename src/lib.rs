@@ -1,11 +1,14 @@
 extern crate amqp;
 extern crate fallible_iterator;
+extern crate r2d2;
+extern crate r2d2_postgres;
 extern crate postgres;
 #[macro_use] extern crate log;
 
-use amqp::{Session, Basic, protocol, Channel, Table};
+use amqp::{Session, Basic, protocol, Channel, Table, AMQPError};
 use fallible_iterator::FallibleIterator;
-use postgres::*;
+use r2d2::{Pool, PooledConnection};
+use r2d2_postgres::{PostgresConnectionManager};
 use std::default::Default;
 use std::thread;
 use std::thread::JoinHandle;
@@ -20,94 +23,55 @@ enum Type {
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 struct Binding{
   pg_channel: String,
-  amqp_entity: String,
-  amqp_entity_type: Option<Type>
+  amqp_entity: String
+}
+
+//Used for channel ids
+struct ChannelCounter{
+  counter: u16
+}
+impl ChannelCounter {
+  pub fn new() -> ChannelCounter {
+    ChannelCounter { counter: 0 }
+  }
+  pub fn inc(&mut self) -> u16 {
+    self.counter += 1;
+    self.counter
+  }
 }
 
 const SEPARATOR: char = '|';
 
-pub struct Bridge{
-  pub is_ready: bool,
-}
+pub fn start(pool: Pool<PostgresConnectionManager>, amqp_uri: &str, bridge_channels: &str, delivery_mode: &u8){
+  let mut children = Vec::new();
 
-impl Bridge {
-  pub fn new() -> Bridge {
-    Bridge { is_ready: false }
+  for binding in parse_bridge_channels(bridge_channels){
+    children.push(
+      spawn_listener_publisher(pool.get().unwrap(), amqp_uri.to_string(), binding, delivery_mode.to_owned()))
   }
-  pub fn start(&mut self, amqp_uri: &str, pg_uri: &String, bridge_channels: &str, delivery_mode: &u8){
 
-    let mut bindings = parse_bridge_channels(bridge_channels);
-    let mut children = Vec::new();
-
-    let mut session = wait_for_amqp_session(amqp_uri);
-
-    wait_for_pg_connection(pg_uri);
-
-    let mut channel_id = 0;
-
-    for binding in &mut bindings{
-      channel_id += 1; let channel1 = session.open_channel(channel_id).unwrap();
-      channel_id += 1; let channel2 = session.open_channel(channel_id).unwrap();
-      let amqp_entity_type = amqp_entity_type(channel1, channel2, &binding.amqp_entity);
-      if amqp_entity_type.is_none(){
-        panic!("The amqp entity {:?} doesn't exist", binding.amqp_entity);
-      }else{
-        binding.amqp_entity_type = amqp_entity_type;
-      }
-    }
-
-    self.is_ready = true;
-
-    for binding in bindings{
-      channel_id += 1; let channel = session.open_channel(channel_id).unwrap();
-      children.push(spawn_listener_publisher(channel, pg_uri.clone(), binding, delivery_mode.to_owned()));
-    }
-
-    for child in children{
-      let _ = child.join();
-    }
+  for child in children{
+    let _ = child.join();
   }
 }
 
-fn wait_for_amqp_session(amqp_uri: &str) -> Session {
-  println!("Attempting to connect to AMQP server..");
-  let mut s = Session::open_url(amqp_uri);
-  // Retry with cyclic exponential backoff
-  let mut i = 1;
-  while let Err(e)  = s {
-    println!("{:?}", e);
-    let time = Duration::from_secs(i);
-    println!("Retrying the AMQP connection in {:?} seconds..", time.as_secs());
-    thread::sleep(time);
-    s = Session::open_url(amqp_uri);
-    i *= 2;
-    if i > 32 { i = 1 };
-  };
-  println!("Connection to AMQP server successful");
-  s.unwrap()
-}
-
-fn wait_for_pg_connection(pg_uri: &String){
-  println!("Attempting to connect to PostgreSQL..");
-  let mut pg_conn = Connection::connect(pg_uri.to_owned(), TlsMode::None);
-  // Retry with cyclic exponential backoff
-  let mut i = 1;
-  while let Err(e)  = pg_conn {
-    println!("{:?}", e);
-    let time = Duration::from_secs(i);
-    println!("Retrying the PostgreSQL connection in {:?} seconds..", time.as_secs());
-    thread::sleep(time);
-    pg_conn = Connection::connect(pg_uri.to_owned(), TlsMode::None);
-    i *= 2;
-    if i > 32 { i = 1 };
-  };
-  let _ = pg_conn.unwrap().finish();
-  println!("Connection to PostgreSQL successful");
-}
-
-fn spawn_listener_publisher(mut channel: Channel, pg_uri: String, binding: Binding, delivery_mode: u8) -> JoinHandle<()>{
+fn spawn_listener_publisher(pg_conn: PooledConnection<PostgresConnectionManager>,
+                            amqp_uri: String, binding: Binding, delivery_mode: u8) -> JoinHandle<()> {
   thread::spawn(move ||{
-    let pg_conn = Connection::connect(pg_uri, TlsMode::None).expect("Could not connect to PostgreSQL");
+
+    let mut channel_counter = ChannelCounter::new();
+    let mut session = wait_for_amqp_session(&amqp_uri, binding.pg_channel.as_str());
+    let amqp_entity_type = match get_amq_entity_type(
+      &mut session.open_channel(channel_counter.inc()).unwrap(),
+      &mut session.open_channel(channel_counter.inc()).unwrap(),
+      &binding.amqp_entity){
+        None      => {
+          error!("The amqp entity {:?} doesn't exist", binding.amqp_entity);
+          std::process::exit(1);
+        }
+        Some(typ) => typ
+    };
+    let mut local_channel = session.open_channel(channel_counter.inc()).unwrap();
 
     let listen_command = format!("LISTEN {}", binding.pg_channel);
     pg_conn.execute(listen_command.as_str(), &[]).unwrap();
@@ -117,36 +81,71 @@ fn spawn_listener_publisher(mut channel: Channel, pg_uri: String, binding: Bindi
     let notifications = pg_conn.notifications();
     let mut it = notifications.blocking_iter();
 
-    let amqp_entity_type = binding.amqp_entity_type.unwrap();
-
     while let Ok(Some(notification)) = it.next() {
       let (routing_key, message) = parse_notification(&notification.payload);
-      let (exchange, key) =  if amqp_entity_type == Type::Exchange {
-                               (binding.amqp_entity.as_str(), routing_key)
-                             } else {
-                               ("", binding.amqp_entity.as_str())
-                             };
-      channel.basic_publish(exchange, key, true, false,
-                            protocol::basic::BasicProperties{ content_type: Some("text".to_string()), delivery_mode: Some(delivery_mode), ..Default::default()},
-                            message.as_bytes().to_vec()).unwrap();
-      info!("{:?} -> {:?} {:?} ( routing_key: {:?}, message: {:?} )",
-               binding.pg_channel, amqp_entity_type, binding.amqp_entity, routing_key, message);
+      let (exchange, key) =
+        if amqp_entity_type == Type::Exchange {
+          (binding.amqp_entity.as_str(), routing_key)
+        } else {
+          ("", binding.amqp_entity.as_str())
+        };
+
+      let mut publication = local_channel.basic_publish(
+          exchange, key, true, false,
+          protocol::basic::BasicProperties{ content_type: Some("text".to_string()), delivery_mode: Some(delivery_mode), ..Default::default()},
+          message.as_bytes().to_vec());
+
+      // When RMQ connection is lost retry it
+      if let Err(e@AMQPError::IoError(_)) = publication {
+        error!("{:?}", e);
+        session = wait_for_amqp_session(amqp_uri.as_str(), binding.pg_channel.as_str());
+        local_channel = match get_amq_entity_type(
+          &mut session.open_channel(channel_counter.inc()).unwrap(),
+          &mut session.open_channel(channel_counter.inc()).unwrap(),
+          &binding.amqp_entity){
+            None      => {
+              error!("The amqp entity {:?} doesn't exist", binding.amqp_entity);
+              std::process::exit(1);
+            },
+            Some(_) => session.open_channel(channel_counter.inc()).unwrap()
+        };
+        // Republish message
+        publication =
+          local_channel.basic_publish(
+            exchange, key, true, false,
+            protocol::basic::BasicProperties{ content_type: Some("text".to_string()), delivery_mode: Some(delivery_mode), ..Default::default()},
+            message.as_bytes().to_vec());
+      }
+
+      match publication{
+        Ok(_) => {
+          info!("{:?} -> {:?} {:?} ( routing_key: {:?}, message: {:?} )",
+                binding.pg_channel, amqp_entity_type, binding.amqp_entity, routing_key, message);
+        },
+        Err(e)  => error!("{:?}", e)
+      }
     }
+
+    local_channel.close(200, "").unwrap();
+    session.close(200, "");
   })
 }
 
+
 /*
- * Finds the amqp entity type(Queue or Exchange) using two channels because currently rust-amqp hangs up when 
- * doing exchange_declare and queue_declare on the samme channel.
+ * Finds the amqp entity type(Queue or Exchange) using two channels because currently rust-amqp hangs up when
+ * doing exchange_declare and queue_declare on the same channel.
  * It does this with amqp "passive" set to true.
 */
-fn amqp_entity_type(mut channel1: Channel, mut channel2: Channel, amqp_entity: &str) -> Option<Type>{
-  let opt_queue_type = channel1.queue_declare(amqp_entity.clone(), true, false, false, false, false, Table::new())
+fn get_amq_entity_type(queue_channel: &mut Channel, exchange_channel: &mut Channel, amqp_entity: &str) -> Option<Type>{
+  let opt_queue_type = queue_channel.queue_declare(amqp_entity.clone(), true, false, false, false, false, Table::new())
                        .map(|_| Type::Queue).ok();
-  let opt_exchange_type = channel2.exchange_declare(amqp_entity, "", true, false, false, false, false, Table::new())
+  let opt_exchange_type = exchange_channel.exchange_declare(amqp_entity, "", true, false, false, false, false, Table::new())
                           .map(|_| Type::Exchange).ok();
-  channel1.close(200, "").unwrap();
-  channel2.close(200, "").unwrap();
+  queue_channel.close(200, "").unwrap();
+  //Somehow the exchange channel is not being closed, a solution could be to close session and reopen
+  //However when doing that some error messages(they don't seem to affect the bridge) are shown and that could be confusing for the user
+  exchange_channel.close(200, "").unwrap();
   opt_exchange_type.or(opt_queue_type)
 }
 
@@ -155,9 +154,7 @@ fn parse_bridge_channels(bridge_channels: &str) -> Vec<Binding>{
   let strs: Vec<Vec<&str>> = bridge_channels.split(",").map(|s| s.split(":").collect()).collect();
   for i in 0..strs.len(){
     bindings.push(Binding{pg_channel: strs[i][0].trim().to_string(),
-                        amqp_entity: strs[i].get(1).unwrap_or(&"").trim().to_string(),
-                        amqp_entity_type: None
-                 });
+                        amqp_entity: strs[i].get(1).unwrap_or(&"").trim().to_string()});
   }
   let mut cleaned_bindings : Vec<Binding> = bindings.into_iter().filter(|x| !x.pg_channel.is_empty() && !x.amqp_entity.is_empty())
                                           .collect();
@@ -184,6 +181,23 @@ fn parse_notification(payload: &str) -> (&str, &str){
   }
 }
 
+pub fn wait_for_amqp_session(amqp_uri: &str, pg_channel: &str) -> Session {
+  println!("Attempting to obtain connection on AMQP server for {} channel..", pg_channel);
+  let mut s = Session::open_url(amqp_uri);
+  let mut i = 1;
+  while let Err(e)  = s {
+    println!("{:?}", e);
+    let time = Duration::from_secs(i);
+    println!("Retrying the AMQP connection for {} channel in {:?} seconds..", pg_channel, time.as_secs());
+    thread::sleep(time);
+    s = Session::open_url(amqp_uri);
+    i *= 2;
+    if i > 32 { i = 1 };
+  };
+  println!("Connection to AMQP server for {} channel successful", pg_channel);
+  s.unwrap()
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -201,16 +215,16 @@ mod tests {
 
   #[test]
   fn parse_bridge_channels_works() {
-    assert!(vec![Binding{pg_channel: "pgchannel1".to_string(), amqp_entity: "exchange1".to_string(), amqp_entity_type: None}]
+    assert!(vec![Binding{pg_channel: "pgchannel1".to_string(), amqp_entity: "exchange1".to_string()}]
             == parse_bridge_channels("pgchannel1:exchange1"));
     assert!(vec![
-              Binding{pg_channel: "pgchannel1".to_string(), amqp_entity: "exchange1".to_string(), amqp_entity_type: None},
-              Binding{pg_channel: "pgchannel2".to_string(), amqp_entity: "exchange2".to_string(), amqp_entity_type: None}
+              Binding{pg_channel: "pgchannel1".to_string(), amqp_entity: "exchange1".to_string()},
+              Binding{pg_channel: "pgchannel2".to_string(), amqp_entity: "exchange2".to_string()}
             ] == parse_bridge_channels("pgchannel1:exchange1,pgchannel2:exchange2"));
     assert!(vec![
-              Binding{pg_channel: "pgchannel1".to_string(), amqp_entity: "exchange1".to_string(), amqp_entity_type: None},
-              Binding{pg_channel: "pgchannel2".to_string(), amqp_entity: "exchange2".to_string(), amqp_entity_type: None},
-              Binding{pg_channel: "pgchannel3".to_string(), amqp_entity: "exchange3".to_string(), amqp_entity_type: None}
+              Binding{pg_channel: "pgchannel1".to_string(), amqp_entity: "exchange1".to_string()},
+              Binding{pg_channel: "pgchannel2".to_string(), amqp_entity: "exchange2".to_string()},
+              Binding{pg_channel: "pgchannel3".to_string(), amqp_entity: "exchange3".to_string()}
             ] == parse_bridge_channels(" pgchannel1 : exchange1 , pgchannel2 : exchange2 , pgchannel3 : exchange3, "));
   }
 
@@ -232,4 +246,3 @@ mod tests {
     assert!(catch_unwind(|| parse_bridge_channels("pgchannel2, pgchannel2")).is_err());
   }
 }
-

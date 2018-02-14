@@ -1,8 +1,13 @@
 extern crate env_logger;
 extern crate pg_amqp_bridge as bridge;
+extern crate r2d2;
+extern crate r2d2_postgres;
 
 use std::env;
-use bridge::Bridge;
+use std::thread;
+use std::time::Duration;
+use r2d2::{Pool, ManageConnection};
+use r2d2_postgres::{TlsMode, PostgresConnectionManager};
 
 #[derive(Debug, Clone)]
 struct Config {
@@ -32,6 +37,28 @@ impl Config {
 fn main() {
   env_logger::init().unwrap();
   let config = Config::new();
-  Bridge::new().start(&config.amqp_uri, &config.postgresql_uri, &config.bridge_channels, &config.delivery_mode);
+
+  loop {
+    let pool = wait_for_pg_connection(&config.postgresql_uri);
+    // This functions spawns threads for each pg channel and waits for the threads to finish,
+    // that only occurs when the threads die due to a pg connection error
+    // and so if that happens the pg connection is retried and the bridge is started again.
+    bridge::start(pool, &config.amqp_uri, &config.bridge_channels, &config.delivery_mode);
+  }
 }
 
+fn wait_for_pg_connection(pg_uri: &String) -> Pool<PostgresConnectionManager> {
+  println!("Attempting to connect to PostgreSQL..");
+  let conn = PostgresConnectionManager::new(pg_uri.to_owned(), TlsMode::None).unwrap();
+  let mut i = 1;
+  while let Err(e) = conn.connect() {
+    println!("{:?}", e);
+    let time = Duration::from_secs(i);
+    println!("Retrying the PostgreSQL connection in {:?} seconds..", time.as_secs());
+    thread::sleep(time);
+    i *= 2;
+    if i > 32 { i = 1 };
+  };
+  println!("Connection to PostgreSQL successful");
+  Pool::new(conn).unwrap()
+}

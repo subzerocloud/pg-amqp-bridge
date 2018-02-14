@@ -4,7 +4,11 @@ extern crate futures;
 extern crate tokio_core;
 extern crate lapin_futures as lapin;
 extern crate postgres;
+extern crate r2d2;
+extern crate r2d2_postgres;
 
+use r2d2::{Pool};
+use r2d2_postgres::{PostgresConnectionManager};
 use postgres::{Connection, TlsMode};
 use futures::*;
 use tokio_core::reactor::Core;
@@ -16,7 +20,6 @@ use std::env;
 use std::thread;
 use std::time::Duration;
 use test::*;
-use bridge::Bridge;
 
 //Lapin doesn't support amqp://localhost// format.
 const TEST_AMQP_HOST_PORT: &str = "127.0.0.1:5672";
@@ -235,12 +238,15 @@ fn main() {
   add_test(&mut tests, "publishing_to_queue_works".to_string(), publishing_to_queue_works);
   add_test(&mut tests, "publishing_to_direct_exchange_works".to_string(), publishing_to_direct_exchange_works);
   add_test(&mut tests, "publishing_to_topic_exchange_works".to_string(), publishing_to_topic_exchange_works);
+
+  let pool = Pool::builder()
+    .connection_timeout(Duration::from_secs(1))
+    .build(PostgresConnectionManager::new(TEST_PG_URI.to_string(), r2d2_postgres::TlsMode::None).unwrap())
+    .unwrap();
   thread::spawn(move ||
-    Bridge::new().start(&TEST_AMQP_URI.to_string(),
-                        &TEST_PG_URI.to_string(),
-                        &bridge_channels, &(1 as u8))
+    bridge::start(pool, &TEST_AMQP_URI, &bridge_channels, &(1 as u8))
   );
-  thread::sleep(Duration::from_secs(2));
+  thread::sleep(Duration::from_secs(4));
   test::test_main(&args, tests);
   teardown();
 }
