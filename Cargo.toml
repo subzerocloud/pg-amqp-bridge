@@ -1,6 +1,6 @@
 [package]
 name = "pg-amqp-bridge"
-version = "0.0.4"
+version = "0.0.6"
 authors = ["steve-chavez <stevechavezast@gmail.com>"]
 
 [[test]]
