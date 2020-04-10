@@ -4,6 +4,7 @@ extern crate r2d2;
 extern crate r2d2_postgres;
 
 use std::env;
+use std::fs;
 use std::thread;
 use std::time::Duration;
 use r2d2::{Pool, ManageConnection};
@@ -20,8 +21,8 @@ struct Config {
 impl Config {
   fn new() -> Config {
     Config {
-      postgresql_uri: env::var("POSTGRESQL_URI").expect("POSTGRESQL_URI environment variable must be defined"),
-      amqp_uri: env::var("AMQP_URI").expect("AMQP_URI environment variable must be defined"),
+      postgresql_uri: read_env_with_secret("POSTGRESQL_URI"),
+      amqp_uri: read_env_with_secret("AMQP_URI"),
       bridge_channels: env::var("BRIDGE_CHANNELS").expect("BRIDGE_CHANNELS environment variable must be defined"),
       delivery_mode:
         match env::var("DELIVERY_MODE").ok().as_ref().map(String::as_ref){
@@ -31,6 +32,13 @@ impl Config {
           Some(_) => panic!("DELIVERY_MODE environment variable can only be PERSISTENT or NON-PERSISTENT")
         }
     }
+  }
+}
+
+fn read_env_with_secret(key: &str) -> String {
+  return match env::var(format!("{}_FILE", key)) {
+    Ok(val) => fs::read_to_string(val.clone()).expect(format!("Something went wrong reading {}", val).as_ref()),
+    Err(_e) => env::var(key).expect(format!("{} environment variable must be defined", key).as_ref()),
   }
 }
 
