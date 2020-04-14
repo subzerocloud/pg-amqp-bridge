@@ -20,6 +20,7 @@ script:
 before_deploy:
   - cargo build --release --target=x86_64-unknown-linux-gnu
   - tar czf pg-amqp-bridge-${TRAVIS_TAG}-x86_64-unknown-linux-gnu.tar.gz -C target/x86_64-unknown-linux-gnu/release pg-amqp-bridge
+  - docker build -t pg-amqp-bridge .
   # need to figure our the linker
   # - rustup target add x86_64-apple-darwin
   # - rustup target add x86_64-pc-windows-msvc
@@ -44,7 +45,6 @@ deploy:
 
 after_deploy:
   - docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD";
-    docker build --build-arg VERSION=${TRAVIS_TAG} -t pg-amqp-bridge .;
     docker tag pg-amqp-bridge:latest subzerocloud/pg-amqp-bridge:latest;
     docker tag pg-amqp-bridge:latest subzerocloud/pg-amqp-bridge:${TRAVIS_TAG};
     docker push subzerocloud/pg-amqp-bridge:${TRAVIS_TAG};
