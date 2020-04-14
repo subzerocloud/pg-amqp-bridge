@@ -1,4 +1,4 @@
-extern crate test;
+extern crate rustc_test;
 extern crate pg_amqp_bridge as bridge;
 extern crate futures;
 extern crate tokio_core;
@@ -19,7 +19,7 @@ use lapin::types::FieldTable;
 use std::env;
 use std::thread;
 use std::time::Duration;
-use test::*;
+use rustc_test::*;
 
 //Lapin doesn't support amqp://localhost// format.
 const TEST_AMQP_HOST_PORT: &str = "127.0.0.1:5672";
