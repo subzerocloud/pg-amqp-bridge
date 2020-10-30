@@ -1,0 +1,53 @@
+{
+    "users": [
+        {
+            "name": "guest",
+            "password": "guest",
+            "tags": "administrator"
+        }
+    ],
+    "vhosts": [
+        {
+            "name": "/"
+        }
+    ],
+    "permissions": [
+        {
+            "user": "guest",
+            "vhost": "/",
+            "configure": ".*",
+            "write": ".*",
+            "read": ".*"
+        }
+    ],
+    "queues": [
+        {
+            "name": "destination",
+            "vhost": "/",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        }
+    ],
+    "exchanges": [
+        {
+            "name": "from-database",
+            "vhost": "/",
+            "type": "topic",
+            "durable": true,
+            "auto_delete": false,
+            "internal": false,
+            "arguments": {}
+        }
+    ],
+    "bindings": [
+        {
+            "source": "from-database",
+            "vhost": "/",
+            "destination": "destination",
+            "destination_type": "queue",
+            "routing_key": "key",
+            "arguments": {}
+        }
+    ]
+}
