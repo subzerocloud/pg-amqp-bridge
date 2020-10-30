@@ -4,8 +4,9 @@ extern crate r2d2;
 extern crate r2d2_postgres;
 extern crate postgres;
 #[macro_use] extern crate log;
+#[macro_use] extern crate maplit;
 
-use amqp::{Session, Basic, protocol, Channel, Table, AMQPError};
+use amqp::{Session, Basic, protocol, Channel, Table, AMQPError, TableEntry};
 use fallible_iterator::FallibleIterator;
 use r2d2::{Pool, PooledConnection};
 use r2d2_postgres::{PostgresConnectionManager};
@@ -41,6 +42,9 @@ impl ChannelCounter {
 }
 
 const SEPARATOR: char = '|';
+const HEADERS_SEPARATOR: char = ';';
+const HEADER_NAME_VALUE_SEPARATOR: char = ':';
+const HEADER_VALUES_SEPARATOR: char = ',';
 
 pub fn start(pool: Pool<PostgresConnectionManager>, amqp_uri: &str, bridge_channels: &str, delivery_mode: &u8){
   let mut children = Vec::new();
@@ -82,7 +86,7 @@ fn spawn_listener_publisher(pg_conn: PooledConnection<PostgresConnectionManager>
     let mut it = notifications.blocking_iter();
 
     while let Ok(Some(notification)) = it.next() {
-      let (routing_key, message) = parse_notification(&notification.payload);
+      let (routing_key, message, headers) = parse_notification(&notification.payload);
       let (exchange, key) =
         if amqp_entity_type == Type::Exchange {
           (binding.amqp_entity.as_str(), routing_key)
@@ -92,7 +96,12 @@ fn spawn_listener_publisher(pg_conn: PooledConnection<PostgresConnectionManager>
 
       let mut publication = local_channel.basic_publish(
           exchange, key, true, false,
-          protocol::basic::BasicProperties{ content_type: Some("text".to_string()), delivery_mode: Some(delivery_mode), ..Default::default()},
+          protocol::basic::BasicProperties{
+            content_type: Some("text".to_string()),
+            headers,
+            delivery_mode: Some(delivery_mode),
+            ..Default::default()
+          },
           message.as_bytes().to_vec());
 
       // When RMQ connection is lost retry it
@@ -172,12 +181,27 @@ fn parse_bridge_channels(bridge_channels: &str) -> Vec<Binding>{
   cleaned_bindings
 }
 
-fn parse_notification(payload: &str) -> (&str, &str){
-  let v: Vec<&str> = payload.splitn(2, SEPARATOR).map(|x| x.trim()).collect();
-  if v.len() > 1 {
-    (v[0], v[1])
-  } else {
-    ("", v[0])
+fn parse_notification(payload: &str) -> (&str, &str, Option<Table>){
+  let v: Vec<&str> = payload.splitn(3, SEPARATOR).map(|x| x.trim()).collect();
+  match v.len() {
+    3 => {
+        let components: Vec<&str> = v[2].split(HEADERS_SEPARATOR).map(|x| x.trim()).collect();
+        let mut headers = Table::new();
+        for c in components {
+            let array: Vec<&str> = c.splitn(2, HEADER_NAME_VALUE_SEPARATOR).map(|x| x.trim()).collect();
+            if let [name, values] = array[..] {
+                let values: Vec<&str> = values.split( HEADER_VALUES_SEPARATOR).map(|x| x.trim()).collect();
+                let mut fields = vec![];
+                for v in values {
+                    fields.push(TableEntry::LongString(v.to_owned()));
+                }
+                headers.insert(name.to_owned(), TableEntry::FieldArray(fields));
+            }
+        }
+        (v[0], v[1], Some(headers))
+    },
+    2 => (v[0], v[1], None),
+    _ => ("", v[0], None)
   }
 }
 
@@ -204,13 +228,22 @@ mod tests {
 
   #[test]
   fn parse_notification_works() {
-    assert!(("my_key", "A message") == parse_notification("my_key|A message"));
-    assert!(("my_key", "A message") == parse_notification("  my_key  |  A message  "));
-    assert!(("my_key", "A message|Rest of message") == parse_notification("my_key|A message|Rest of message"));
-    assert!(("", "my_key##A message") == parse_notification("my_key##A message"));
-    assert!(("", "A message") == parse_notification("A message"));
-    assert!(("", "") == parse_notification(""));
-    assert!(("mý_kéý", "A mésságé") == parse_notification("mý_kéý|A mésságé"));
+    assert!(("my_key", "A message", None) == parse_notification("my_key|A message"));
+    assert!(("my_key", "A message", None) == parse_notification("  my_key  |  A message  "));
+    assert!(("", "my_key##A message", None) == parse_notification("my_key##A message"));
+    assert!(("", "A message", None) == parse_notification("A message"));
+    assert!(("", "", None) == parse_notification(""));
+    assert!(("mý_kéý", "A mésságé", None) == parse_notification("mý_kéý|A mésságé"));
+
+    assert_eq!(("my_key", "A message", Some(hashmap!{
+      "Content-Type".to_owned() => TableEntry::FieldArray(vec![
+        TableEntry::LongString("application/json".to_owned()),
+        TableEntry::LongString("application/octet-stream".to_owned()),
+      ]),
+      "X-My-Header".to_owned() => TableEntry::FieldArray(vec![
+        TableEntry::LongString("my-value".to_owned()),
+      ])
+    })), parse_notification("my_key|A message|Content-Type: application/json, application/octet-stream; X-My-Header: my-value"));
   }
 
   #[test]

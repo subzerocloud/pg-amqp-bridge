@@ -83,6 +83,7 @@ You can specify the routing key with the usual syntax used for topic exchanges.
 NOTIFY pgchannel3, '*.orange|Topic message';
 NOTIFY pgchannel3, 'quick.brown.fox|Topic message';
 NOTIFY pgchannel3, 'lazy.#|Topic message';
+NOTIFY pgchannel3, 'key|message|X-First-Header: value1, value2; X-Second-Header: value3'
 ```
 
 ## Helper Functions

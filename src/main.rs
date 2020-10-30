@@ -1,3 +1,4 @@
+extern crate maplit;
 extern crate env_logger;
 extern crate pg_amqp_bridge as bridge;
 extern crate r2d2;
