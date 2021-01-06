@@ -121,7 +121,7 @@ $$ stable language plpgsql;
 After this, you can send events from your stored procedures like this
 
 ```sql
-rabbitmq.send_message('exchange-name', 'routing-key', 'Hi!');
+select rabbitmq.send_message('exchange-name', 'routing-key', 'Hi!');
 ```
 
 You can stream row changes by attaching a trigger to tables
