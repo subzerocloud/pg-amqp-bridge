@@ -8,7 +8,7 @@ use std::fs;
 use std::thread;
 use std::time::Duration;
 use r2d2::{Pool, ManageConnection};
-use r2d2_postgres::{TlsMode, PostgresConnectionManager};
+use r2d2_postgres::{PostgresConnectionManager, postgres::NoTls};
 
 #[derive(Debug, Clone)]
 struct Config {
@@ -43,7 +43,7 @@ fn read_env_with_secret(key: &str) -> String {
 }
 
 fn main() {
-  env_logger::init().unwrap();
+  env_logger::init();
   let config = Config::new();
 
   loop {
@@ -55,9 +55,9 @@ fn main() {
   }
 }
 
-fn wait_for_pg_connection(pg_uri: &String) -> Pool<PostgresConnectionManager> {
+fn wait_for_pg_connection(pg_uri: &String) -> Pool<PostgresConnectionManager<NoTls>> {
   println!("Attempting to connect to PostgreSQL..");
-  let conn = PostgresConnectionManager::new(pg_uri.to_owned(), TlsMode::None).unwrap();
+  let conn = PostgresConnectionManager::new(pg_uri.to_owned().parse().unwrap(), NoTls);
   let mut i = 1;
   while let Err(e) = conn.connect() {
     println!("{:?}", e);
