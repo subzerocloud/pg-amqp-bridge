@@ -9,10 +9,13 @@ extern crate r2d2_postgres;
 
 use r2d2::{Pool};
 use r2d2_postgres::{PostgresConnectionManager};
-use postgres::{Connection, TlsMode};
+use postgres::{NoTls};
 use futures::*;
 use tokio_core::reactor::Core;
 use tokio_core::net::TcpStream;
+//use lapin_futures::types::AMQPType::FieldArray;
+use lapin_futures::types::AMQPValue::FieldArray;
+use lapin_futures::types::AMQPValue::LongString;
 use lapin::client::*;
 use lapin::channel::*;
 use lapin::types::FieldTable;
@@ -48,7 +51,7 @@ fn publishing_to_queue_works() {
   let handle = core.handle();
   let addr = TEST_AMQP_HOST_PORT.parse().unwrap();
 
-  let pg_conn = Connection::connect(TEST_PG_URI, TlsMode::None).unwrap();
+  let mut pg_conn = postgres::Client::connect(TEST_PG_URI, NoTls).unwrap();
 
   let _ = core.run(
     TcpStream::connect(&addr, &handle)
@@ -59,11 +62,13 @@ fn publishing_to_queue_works() {
       .and_then(move |_| 
         channel.basic_consume(TEST_1_QUEUE, "my_consumer_1", &BasicConsumeOptions::default())
         .and_then(move |stream|{
-          pg_conn.execute(format!("NOTIFY {}, '{}|Queue test'", TEST_1_PG_CHANNEL, TEST_1_QUEUE).as_str(), &[]).unwrap();
+          pg_conn.execute(format!("NOTIFY {}, '{}|X-My-Header: my-value|Queue test'", TEST_1_PG_CHANNEL, TEST_1_QUEUE).as_str(), &[]).unwrap();
           stream.into_future().map_err(|(err, _)| err)
           .and_then(move |(message, _)| {
             let msg = message.unwrap();
             assert_eq!(msg.data, b"Queue test");
+            let h = FieldArray([LongString("my-value".to_string())].to_vec());
+            assert_eq!(msg.properties.headers.unwrap().get("X-My-Header"), Some(&h));
             channel.basic_ack(msg.delivery_tag)
           })
         })
@@ -77,7 +82,7 @@ fn publishing_to_direct_exchange_works() {
   let handle = core.handle();
   let addr = TEST_AMQP_HOST_PORT.parse().unwrap();
 
-  let pg_conn = Connection::connect(TEST_PG_URI, TlsMode::None).unwrap();
+  let mut pg_conn = postgres::Client::connect(TEST_PG_URI, NoTls).unwrap();
 
   let _ = core.run(
     TcpStream::connect(&addr, &handle)
@@ -116,7 +121,7 @@ fn publishing_to_topic_exchange_works() {
   let handle = core.handle();
   let addr = TEST_AMQP_HOST_PORT.parse().unwrap();
 
-  let pg_conn = Connection::connect(TEST_PG_URI, TlsMode::None).unwrap();
+  let mut pg_conn = postgres::Client::connect(TEST_PG_URI, NoTls).unwrap();
 
   let _ = core.run(
     TcpStream::connect(&addr, &handle)
@@ -241,7 +246,7 @@ fn main() {
 
   let pool = Pool::builder()
     .connection_timeout(Duration::from_secs(1))
-    .build(PostgresConnectionManager::new(TEST_PG_URI.to_string(), r2d2_postgres::TlsMode::None).unwrap())
+    .build(PostgresConnectionManager::new(TEST_PG_URI.to_string().parse().unwrap(), NoTls))
     .unwrap();
   thread::spawn(move ||
     bridge::start(pool, &TEST_AMQP_URI, &bridge_channels, &(1 as u8))
