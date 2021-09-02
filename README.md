@@ -12,6 +12,19 @@ If you pair **pg-amqp-bridge**  and the [Web STOMP](https://www.rabbitmq.com/web
 
 The larger goal is to enable the development of backends around [PostgREST](https://postgrest.com)/[subZero](https://subzero.cloud/) philosophy. Check out the [PostgREST Starter Kit](https://github.com/subzerocloud/postgrest-starter-kit) to see how `pg-amqp-bridge` fits in a larger project.
 
+## Alternative upstreams, SSL and WAL events support (commercial)
+For upstreams other then RabbitMQ (and additional features) check out [pg-event-proxy](https://github.com/subzerocloud/pg-event-proxy-example)
+
+Currently the supported upstreams
+- amqp 0.9 (RabbitMQ)
+- mqtt (Apache ActiveMQ, Cassandana, HiveMQ, Mosquitto, RabbitMQ, AWS IoT, Amazon MQ, ...)
+- redis pubsub (Redis)
+- SNS (Amazon Simple Notification Service)
+- SQS (Amazon Simple Queue Service)
+- Lambda (AWS Lambda)
+
+
+
 ## Configuration
 
 Configuration is done through environment variables:
